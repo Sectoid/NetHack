@@ -2977,7 +2977,7 @@ goodfruit:
 				 || (boolopt[i].addr) == &iflags.cursesgraphics
 # endif
 				) {
-				need_redraw = TRUE;
+			    need_redraw = TRUE;
 			}
 #endif /* TERMLIB || ASCIIGRAPH || MAC_GRAPHICS_ENV */
 
