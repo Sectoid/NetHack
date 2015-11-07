@@ -509,6 +509,12 @@ void curses_print_glyph(winid wid, XCHAR_P x, XCHAR_P y, int glyph)
 	{
 	    attr = A_REVERSE;
 	}
+    /* note: iflags.utf8graphics already has full support, so don't convert */
+	if (iflags.cursesgraphics)
+	{
+	    ch = curses_convert_glyph(ch, glyph);
+	}
+
 	if (wid == NHW_MAP) {
 	    if ((special & MG_STAIRS) && iflags.hilite_hidden_stairs) {
 		color = 16 + (color*2);
@@ -516,11 +522,7 @@ void curses_print_glyph(winid wid, XCHAR_P x, XCHAR_P y, int glyph)
 		color = 16 + (color*2) + 1;
 	    }
 	}
-    /* note: iflags.utf8graphics already has full support, so don't convert */
-    if (iflags.cursesgraphics)
-	{
-	    ch = curses_convert_glyph(ch, glyph);
-	}
+
     curses_putch(wid, x, y, ch, color, attr);
 }
 
