@@ -2,6 +2,8 @@
 *.lev
 util/*
 dat/*
+Makefile
+doc/Makefile
 include/date.h
 include/dgn_comp.h
 include/lev_comp.h
