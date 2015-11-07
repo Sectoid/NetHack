@@ -14,6 +14,11 @@ NEARDATA struct instance_flags iflags;	/* provide linkage */
 #include "tcap.h"
 #include <ctype.h>
 #endif
+#include <errno.h>
+
+#ifdef HAVE_SETLOCALE
+#include <locale.h>
+#endif
 
 #define WINTYPELEN 16
 
@@ -21,6 +26,10 @@ NEARDATA struct instance_flags iflags;	/* provide linkage */
 #define PREFER_TILED TRUE
 #else
 #define PREFER_TILED FALSE
+#endif
+
+#ifdef CURSES_GRAPHICS
+extern int curses_read_attrs(char *attrs);
 #endif
 
 /*
@@ -69,19 +78,24 @@ static struct Bool_Opt
 	{"checkspace", (boolean *)0, FALSE, SET_IN_FILE},
 #endif
 	{"cmdassist", &iflags.cmdassist, TRUE, SET_IN_GAME},
-# if defined(MICRO) || defined(WIN32)
+# if defined(MICRO) || defined(WIN32) || defined(CURSES_GRAPHICS)
 	{"color",         &iflags.wc_color,TRUE, SET_IN_GAME},		/*WC*/
 # else	/* systems that support multiple terminals, many monochrome */
 	{"color",         &iflags.wc_color, FALSE, SET_IN_GAME},	/*WC*/
 # endif
 	{"confirm",&flags.confirm, TRUE, SET_IN_GAME},
+#ifdef CURSES_GRAPHICS
+	{"cursesgraphics", &iflags.cursesgraphics, FALSE, SET_IN_GAME},
+#else
+	{"cursesgraphics", (boolean *)0, FALSE, SET_IN_FILE},
+#endif
 #if defined(TERMLIB) && !defined(MAC_GRAPHICS_ENV)
 	{"DECgraphics", &iflags.DECgraphics, FALSE, SET_IN_GAME},
 #else
 	{"DECgraphics", (boolean *)0, FALSE, SET_IN_FILE},
 #endif
 	{"eight_bit_tty", &iflags.wc_eight_bit_input, FALSE, SET_IN_GAME},	/*WC*/
-#ifdef TTY_GRAPHICS
+#if defined(TTY_GRAPHICS) || defined(CURSES_GRAPHICS)
 	{"extmenu", &iflags.extmenu, FALSE, SET_IN_GAME},
 #else
 	{"extmenu", (boolean *)0, FALSE, SET_IN_FILE},
@@ -99,6 +113,7 @@ static struct Bool_Opt
 	{"flush", (boolean *)0, FALSE, SET_IN_FILE},
 #endif
 	{"fullscreen", &iflags.wc2_fullscreen, FALSE, SET_IN_FILE},
+	{"guicolor", &iflags.wc2_guicolor, TRUE, SET_IN_GAME},
 	{"help", &flags.help, TRUE, SET_IN_GAME},
 	{"hilite_pet",    &iflags.wc_hilite_pet, FALSE, SET_IN_GAME},	/*WC*/
 #ifdef ASCIIGRAPH
@@ -131,7 +146,11 @@ static struct Bool_Opt
 #else
 	{"menu_tab_sep", (boolean *)0, FALSE, SET_IN_FILE},
 #endif
+#ifdef CURSES_GRAPHICS
+	{"mouse_support", &iflags.wc_mouse_support, FALSE, DISP_IN_GAME},	/*WC*/
+#else
 	{"mouse_support", &iflags.wc_mouse_support, TRUE, DISP_IN_GAME},	/*WC*/
+#endif
 #ifdef NEWS
 	{"news", &iflags.news, TRUE, DISP_IN_GAME},
 #else
@@ -188,6 +207,11 @@ static struct Bool_Opt
 	{"tombstone",&flags.tombstone, TRUE, SET_IN_GAME},
 	{"toptenwin",&flags.toptenwin, FALSE, SET_IN_GAME},
 	{"travel", &iflags.travelcmd, TRUE, SET_IN_GAME},
+#ifdef UTF8_GLYPHS
+	{"UTF8graphics", &iflags.UTF8graphics, FALSE, SET_IN_GAME},
+#else
+	{"UTF8graphics", (boolean *)0, FALSE, SET_IN_FILE},
+#endif
 #ifdef WIN32CON
 	{"use_inverse",   &iflags.wc_inverse, TRUE, SET_IN_GAME},		/*WC*/
 #else
@@ -288,6 +312,7 @@ static struct Comp_Opt
 						15, SET_IN_FILE },
 # endif
 #endif
+	{ "petattr",  "attributes for highlighting pets", 12, SET_IN_FILE },
 	{ "pettype",  "your preferred initial pet type", 4, DISP_IN_GAME },
 	{ "pickup_burden",  "maximum burden picked up before prompt",
 						20, SET_IN_GAME },
@@ -527,6 +552,12 @@ initoptions()
 		monsyms[i] = (uchar) def_monsyms[i];
 	for (i = 0; i < WARNCOUNT; i++)
 		warnsyms[i] = def_warnsyms[i].sym;
+
+/* FIXME: These should be integrated into objclass and permonst structs,
+   but that invalidates saves */
+	memset(objclass_unicode_codepoint, 0, sizeof(objclass_unicode_codepoint));
+	memset(permonst_unicode_codepoint, 0, sizeof(permonst_unicode_codepoint));
+
 	iflags.bouldersym = 0;
 	iflags.travelcc.x = iflags.travelcc.y = -1;
 	flags.warnlevel = 1;
@@ -566,6 +597,14 @@ initoptions()
 		switch_graphics(DEC_GRAPHICS);
 	}
 # endif
+#  ifdef HAVE_SETLOCALE
+	/* try to detect if a utf-8 locale is supported */
+	if (setlocale(LC_ALL, "") &&
+	    (opts = setlocale(LC_CTYPE, NULL)) &&
+	    ((strstri(opts, "utf8") != 0) || (strstri(opts, "utf-8") != 0))) {
+		switch_graphics(UTF8_GRAPHICS);
+	}
+#  endif
 #endif /* UNIX || VMS */
 
 #ifdef MAC_GRAPHICS_ENV
@@ -657,7 +696,7 @@ char *tp;
 		for (; (index("0123456789",*cp)) && (dcount++ < 3); cp++)
 		    cval = (cval * 10) + (*cp - '0');
 	}
-	else if (*cp == '\\')		/* C-style character escapes */
+	else if (*cp == '\\' && cp[1] != '\0')		/* C-style character escapes */
 	{
 	    switch (*++cp)
 	    {
@@ -670,13 +709,17 @@ char *tp;
 	    }
 	    cp++;
 	}
-	else if (*cp == '^')		/* expand control-character syntax */
+	else if (*cp == '^' && cp[1] != '\0')		/* expand control-character syntax */
 	{
 	    cval = (*++cp & 0x1f);
 	    cp++;
 	}
-	else
+	else if (*cp != '\0') {
 	    cval = *cp++;
+	} else {
+	    cval = 0;
+	    meta = 0;
+	}
 	if (meta)
 	    cval |= 0x80;
 	*tp++ = cval;
@@ -813,7 +856,7 @@ register char *opts;
 const char *optype;
 int maxlen, offset;
 {
-	uchar translate[MAXPCHARS+1];
+	glyph_t translate[MAXPCHARS+1];
 	int length, i;
 
 	if (!(opts = string_for_env_opt(optype, opts, FALSE)))
@@ -824,7 +867,7 @@ int maxlen, offset;
 	if (length > maxlen) length = maxlen;
 	/* match the form obtained from PC configuration files */
 	for (i = 0; i < length; i++)
-		translate[i] = (uchar) opts[i];
+		translate[i] = (glyph_t) opts[i];
 	assign_graphics(translate, length, maxlen, offset);
 }
 
@@ -962,6 +1005,225 @@ int bool_or_comp;	/* 0 == boolean option, 1 == compound */
 		}
 	    }
 	}
+}
+
+/** Split up a string that matches name:value or 'name':value and
+ * return name and value separately. */
+static boolean
+parse_extended_option(str, option_name, option_value)
+const char *str;
+char *option_name;	/**< Output string buffer for option name */
+char *option_value;	/**< Output string buffer for option value */
+{
+	int i;
+	char *tmps, *cs;
+	char buf[BUFSZ];
+
+	if (!str) return FALSE;
+
+	strncpy(buf, str, BUFSZ);
+
+	/* remove comment*/
+	cs = strrchr(buf, '#');
+	if (cs) *cs = '\0';
+
+	/* trim whitespace at end of string */
+	i = strlen(buf)-1;
+	while (i>=0 && isspace(buf[i])) {
+		buf[i--] = '\0';
+	}
+
+	/* extract value */
+	cs = strchr(buf, ':');
+	if (!cs) return FALSE;
+
+	tmps = cs;
+	tmps++;
+	/* skip whitespace at start of string */
+	while (*tmps && isspace(*tmps)) tmps++;
+
+	strncpy(option_value, tmps, BUFSZ);
+
+	/* extract option name */
+	*cs = '\0';
+	tmps = buf;
+	if ((*tmps == '"') || (*tmps == '\'')) {
+		cs--;
+		while (isspace(*cs)) cs--;
+		if (*cs == *tmps) {
+			*cs = '\0';
+			tmps++;
+		}
+	}
+
+	strncpy(option_name, tmps, BUFSZ);
+
+	return TRUE;
+}
+
+/** Parse a string as Unicode codepoint and return the numerical codepoint.
+ * Valid codepoints are decimal numbers or U+FFFF and 0xFFFF for hexadecimal
+ * values. */
+int
+parse_codepoint(codepoint)
+char *codepoint;
+{
+	char *ptr, *endptr;
+	int num=0, base;
+
+	/* parse codepoint */
+	if (!strncmpi(codepoint, "u+", 2) ||
+	    !strncmpi(codepoint, "0x", 2)) {
+		/* hexadecimal */
+		ptr = &codepoint[2];
+		base = 16;
+	} else {
+		/* decimal */
+		ptr = &codepoint[0];
+		base = 10;
+	}
+	errno = 0;
+	num = strtol(ptr, &endptr, base);
+	if (errno != 0 || *endptr != 0 || endptr == ptr) {
+		return FALSE;
+	}
+	return num;
+}
+
+/** Parse '"monster name":unicode_codepoint' and change symbol in
+ * monster list. */
+boolean
+parse_monster_symbol(str)
+const char *str;
+{
+	char monster[BUFSZ];
+	char codepoint[BUFSZ];
+	int i, num=0;
+
+	if (!parse_extended_option(str, monster, codepoint)) {
+		return FALSE;
+	}
+
+	num = parse_codepoint(codepoint);
+	if (num < 0) {
+		return FALSE;
+	}
+
+	/* find monster */
+	for (i=0; mons[i].mlet != 0; i++) {
+		if (!strcmpi(monster, mons[i].mname)) {
+			permonst_unicode_codepoint[i] = num;
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+/** Parse '"object name":unicode_codepoint' and change symbol in
+ * object list. */
+boolean
+parse_object_symbol(str)
+const char *str;
+{
+       char object[BUFSZ];
+       char codepoint[BUFSZ];
+       int i, num=0;
+
+       if (!parse_extended_option(str, object, codepoint)) {
+               return FALSE;
+       }
+
+       num = parse_codepoint(codepoint);
+       if (num < 0) {
+               return FALSE;
+       }
+
+       /* find object */
+       for (i=0; obj_descr[i].oc_name || obj_descr[i].oc_descr; i++) {
+               if ((obj_descr[i].oc_name && obj_descr[i].oc_descr) ||
+                   (obj_descr[i].oc_descr)) {
+                       /* Items with both descriptive and actual name or only
+                        * descriptive name. */
+                       if (!strcmpi(object, obj_descr[i].oc_descr)) {
+                               objclass_unicode_codepoint[i] = num;
+                               return TRUE;
+                       }
+               } else if (obj_descr[i].oc_name) {
+                       /* items with only actual name like "carrot" */
+                       if (!strcmpi(object, obj_descr[i].oc_name)) {
+                               objclass_unicode_codepoint[i] = num;
+                               return TRUE;
+                       }
+               }
+       }
+       return FALSE;
+}
+
+
+/** Parse '"dungeon feature":unicode_codepoint' and change symbol in
+ * UTF8graphics. */
+boolean
+parse_symbol(str)
+const char *str;
+{
+	char feature[BUFSZ];
+	char codepoint[BUFSZ];
+	int i, num;
+
+	if (!parse_extended_option(str, feature, codepoint)) {
+		return FALSE;
+	}
+
+	num = parse_codepoint(codepoint);
+	if (num < 0) {
+		return FALSE;
+	}
+
+	/* find dungeon feature */
+	for (i=0; i < MAXPCHARS; i++) {
+		if (!strcmpi(feature, defsyms[i].explanation)) {
+			assign_utf8graphics_symbol(i, num);
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+/* Turns out, you can have multiple graphics turned on. Lets give those a stack ranking */
+int
+bestGraphics()
+{
+#ifdef UTF8_GLYPHS
+	if (iflags.UTF8graphics) return UTF8_GRAPHICS;
+#endif
+#ifdef CURS_GRAPHICS
+	if (iflags.cursesgraphics) return CURS_GRAPHICS;
+#endif
+#ifdef TERMLIB
+	if (iflags.DECgraphics) return DEC_GRAPHICS;
+#endif
+#ifdef MAC_GRAPHICS_ENV
+	if (iflags.MACgraphics) return MAC_GRAPHICS;
+#endif
+#ifdef ASCIIGRAPH
+	if (iflags.IBMgraphics) return IBM_GRAPHICS;
+#endif
+	return ASCII_GRAPHICS;
+}
+
+
+/* We need to select this after all the options have been parsed - given that
+ * parseoptions() is called recusively, this would harm other options */
+void _redraw() {
+# ifdef REINCARNATION
+    if (!initial && Is_rogue_level(&u.uz)) assign_rogue_graphics(FALSE);
+# endif
+    switch_graphics(bestGraphics());
+# ifdef REINCARNATION
+	if (!initial && Is_rogue_level(&u.uz)) assign_rogue_graphics(TRUE);
+# endif
 }
 
 void
@@ -2043,6 +2305,63 @@ goodfruit:
 		return;
 	}
 
+	/* WINCAP2
+	 * term_cols:amount */
+	fullname = "term_cols";
+	if (match_optname(opts, fullname, sizeof("term_cols")-1, TRUE)) {
+		op = string_for_opt(opts, negated);
+		iflags.wc2_term_cols = atoi(op);
+		if (negated) bad_negation(fullname, FALSE);
+		return;
+	}
+
+	/* WINCAP2
+	 * term_rows:amount */
+	fullname = "term_rows";
+	if (match_optname(opts, fullname, sizeof("term_rows")-1, TRUE)) {
+		op = string_for_opt(opts, negated);
+		iflags.wc2_term_rows = atoi(op);
+		if (negated) bad_negation(fullname, FALSE);
+		return;
+	}
+
+
+	/* WINCAP2
+	 * petattr:string */
+	fullname = "petattr";
+	if (match_optname(opts, fullname, sizeof("petattr")-1, TRUE)) {
+		op = string_for_opt(opts, negated);
+		if (op && !negated) {
+		    iflags.wc2_petattr = curses_read_attrs(op);
+		    if (!curses_read_attrs(op))
+		    	badoption(opts);
+		} else if (negated) bad_negation(fullname, TRUE);
+		return;
+	}
+
+
+	/* WINCAP2
+	 * windowborders:n */
+	fullname = "windowborders";
+	if (match_optname(opts, fullname, sizeof("windowborders")-1, TRUE)) {
+		op = string_for_opt(opts, negated);
+		if (negated && op) bad_negation(fullname, TRUE);
+		else {
+		    if (negated)
+		        iflags.wc2_windowborders = 2; /* Off */
+		    else if (!op)
+		        iflags.wc2_windowborders = 1; /* On */
+		    else    /* Value supplied */
+		        iflags.wc2_windowborders = atoi(op);
+		    if ((iflags.wc2_windowborders > 3) ||
+		     (iflags.wc2_windowborders < 1)) {
+		        iflags.wc2_windowborders = 0;
+		        badoption(opts);
+		    }
+		}
+		return;
+	}
+
 	/* menustyle:traditional or combo or full or partial */
 	if (match_optname(opts, "menustyle", 4, TRUE)) {
 		int tmp;
@@ -2149,7 +2468,7 @@ goodfruit:
 
 			duplicate_opt_detection(boolopt[i].name, 0);
 
-#if defined(TERMLIB) || defined(ASCIIGRAPH) || defined(MAC_GRAPHICS_ENV)
+#if defined(TERMLIB) || defined(ASCIIGRAPH) || defined(MAC_GRAPHICS_ENV) || defined(CURSES_GRAPHICS)
 			if (FALSE
 # ifdef TERMLIB
 				 || (boolopt[i].addr) == &iflags.DECgraphics
@@ -2160,31 +2479,14 @@ goodfruit:
 # ifdef MAC_GRAPHICS_ENV
 				 || (boolopt[i].addr) == &iflags.MACgraphics
 # endif
+# ifdef UTF8_GLYPHS
+				 || (boolopt[i].addr) == &iflags.UTF8graphics
+# endif
+# ifdef CURSES_GRAPHICS
+				 || (boolopt[i].addr) == &iflags.cursesgraphics
+# endif
 				) {
-# ifdef REINCARNATION
-			    if (!initial && Is_rogue_level(&u.uz))
-				assign_rogue_graphics(FALSE);
-# endif
-			    need_redraw = TRUE;
-# ifdef TERMLIB
-			    if ((boolopt[i].addr) == &iflags.DECgraphics)
-				switch_graphics(iflags.DECgraphics ?
-						DEC_GRAPHICS : ASCII_GRAPHICS);
-# endif
-# ifdef ASCIIGRAPH
-			    if ((boolopt[i].addr) == &iflags.IBMgraphics)
-				switch_graphics(iflags.IBMgraphics ?
-						IBM_GRAPHICS : ASCII_GRAPHICS);
-# endif
-# ifdef MAC_GRAPHICS_ENV
-			    if ((boolopt[i].addr) == &iflags.MACgraphics)
-				switch_graphics(iflags.MACgraphics ?
-						MAC_GRAPHICS : ASCII_GRAPHICS);
-# endif
-# ifdef REINCARNATION
-			    if (!initial && Is_rogue_level(&u.uz))
-				assign_rogue_graphics(TRUE);
-# endif
+				need_redraw = TRUE;
 			}
 #endif /* TERMLIB || ASCIIGRAPH || MAC_GRAPHICS_ENV */
 
@@ -2223,9 +2525,15 @@ goodfruit:
 			}
 			else if ((boolopt[i].addr) == &iflags.use_inverse ||
 					(boolopt[i].addr) == &iflags.showrace ||
-					(boolopt[i].addr) == &iflags.hilite_pet) {
+					(boolopt[i].addr) == &iflags.hilite_pet ||
+					(boolopt[i].addr) == &iflags.wc2_guicolor) {
 			    need_redraw = TRUE;
 			}
+#ifdef CURSES_GRAPHICS
+			else if ((boolopt[i].addr) == &iflags.cursesgraphics) {
+			    need_redraw = TRUE;
+			}
+#endif
 #ifdef TEXTCOLOR
 			else if ((boolopt[i].addr) == &iflags.use_color) {
 			    need_redraw = TRUE;
@@ -2523,8 +2831,10 @@ doset()
 	}
 
 	destroy_nhwindow(tmpwin);
-	if (need_redraw)
+	if (need_redraw) {
+        _redraw();
 	    (void) doredraw();
+	}
 	return 0;
 }
 
@@ -3087,6 +3397,14 @@ char *buf;
 			FEATURE_NOTICE_VER_MIN,
 			FEATURE_NOTICE_VER_PATCH);
 	}
+	else if (!strcmp(optname, "term_cols")) {
+		if (iflags.wc2_term_cols) Sprintf(buf, "%d",iflags.wc2_term_cols);
+		else Strcpy(buf, defopt);
+	}
+	else if (!strcmp(optname, "term_rows")) {
+		if (iflags.wc2_term_rows) Sprintf(buf, "%d",iflags.wc2_term_rows);
+		else Strcpy(buf, defopt);
+	}
 	else if (!strcmp(optname, "tile_file"))
 		Sprintf(buf, "%s", iflags.wc_tile_file ? iflags.wc_tile_file : defopt);
 	else if (!strcmp(optname, "tile_height")) {
@@ -3120,6 +3438,11 @@ char *buf;
 			ttycolors[CLR_BRIGHT_MAGENTA],
 			ttycolors[CLR_BRIGHT_CYAN]);
 #endif /* VIDEOSHADES */
+	else if (!strcmp(optname,"windowborders"))
+		Sprintf(buf, "%s", iflags.wc2_windowborders == 1     ? "1=on" :
+				   iflags.wc2_windowborders == 2             ? "2=off" :
+				   iflags.wc2_windowborders == 3             ? "3=auto" :
+				   defopt);
 	else if (!strcmp(optname, "windowtype"))
 		Sprintf(buf, "%s", windowprocs.name);
 	else if (!strcmp(optname, "windowcolors"))
@@ -3593,6 +3916,11 @@ struct wc_Opt wc2_options[] = {
 	{"fullscreen", WC2_FULLSCREEN},
 	{"softkeyboard", WC2_SOFTKEYBOARD},
 	{"wraptext", WC2_WRAPTEXT},
+	{"term_cols", WC2_TERM_COLS},
+	{"term_rows", WC2_TERM_ROWS},
+	{"windowborders", WC2_WINDOWBORDERS},
+	{"petattr", WC2_PETATTR},
+	{"guicolor", WC2_GUICOLOR},
 	{(char *)0, 0L}
 };
 
