@@ -1216,7 +1216,7 @@ bestGraphics()
 
 /* We need to select this after all the options have been parsed - given that
  * parseoptions() is called recusively, this would harm other options */
-void _redraw() {
+void _select_graphics() {
 # ifdef REINCARNATION
     if (!initial && Is_rogue_level(&u.uz)) assign_rogue_graphics(FALSE);
 # endif
@@ -2832,7 +2832,7 @@ doset()
 
 	destroy_nhwindow(tmpwin);
 	if (need_redraw) {
-        _redraw();
+        _select_graphics();
 	    (void) doredraw();
 	}
 	return 0;
