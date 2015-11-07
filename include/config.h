@@ -413,7 +413,7 @@ typedef long glyph_t;
 
 #define SORTLOOT /* sortloot -patch */
 
-#define SIMPLE_MAIL  /* dgamelaunch simple mail */
+#define SIMPLE_MAIL /* dgamelaunch simple mail */
 
 #define PARANOID /* paranoid quit &c */
 
@@ -422,7 +422,7 @@ typedef long glyph_t;
    in one line.  Can be left undefined to disable the feature.
    Requires UNIX
 */
-/* #define SERVER_ADMIN_MSG "admin_msg" */
+#define SERVER_ADMIN_MSG "admin_msg"
 
 #define LIVELOGFILE "livelog"
 
