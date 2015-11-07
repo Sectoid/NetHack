@@ -489,32 +489,34 @@ glyph_t curses_convert_glyph(int ch, glyph_t glyph)
         return ch;
     }
 
+    
+#define _wide(val) W##val->chars[0]
     switch (symbol)
     {
         case S_vwall:
-            return WACS_VLINE;
+            return _wide(ACS_VLINE);
         case S_hwall:
-            return WACS_HLINE;
+            return _wide(ACS_HLINE);
         case S_tlcorn:
-            return WACS_ULCORNER;
+            return _wide(ACS_ULCORNER);
         case S_trcorn:
-            return WACS_URCORNER;
+            return _wide(ACS_URCORNER);
         case S_blcorn:
-            return WACS_LLCORNER;
+            return _wide(ACS_LLCORNER);
         case S_brcorn:
-            return WACS_LRCORNER;
+            return _wide(ACS_LRCORNER);
         case S_crwall:
-            return WACS_PLUS;
+            return _wide(ACS_PLUS);
         case S_tuwall:
-            return WACS_BTEE;
+            return _wide(ACS_BTEE);
         case S_tdwall:
-            return WACS_TTEE;
+            return _wide(ACS_TTEE);
         case S_tlwall:
-            return WACS_RTEE;
+            return _wide(ACS_RTEE);
         case S_trwall:
-            return WACS_LTEE;
+            return _wide(ACS_LTEE);
         case S_tree:
-            return WACS_PLMINUS;
+            return _wide(ACS_PLMINUS);
         case S_corr:
             return 0x2591; // LIGHT SHADE
         case S_litcorr:
