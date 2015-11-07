@@ -42,12 +42,21 @@
  * Define all of those you want supported in your binary.
  * Some combinations make no sense.  See the installation document.
  */
-/* #define TTY_GRAPHICS */	/* good old tty based graphics */
+#define TTY_GRAPHICS	/* good old tty based graphics */
 #define CURSES_GRAPHICS     /* Proper curses interface */
 /* #define X11_GRAPHICS */	/* X11 interface */
 /* #define QT_GRAPHICS */	/* Qt interface */
 /* #define GNOME_GRAPHICS */	/* Gnome interface */
 /* #define MSWIN_GRAPHICS */	/* Windows NT, CE, Graphics */
+
+#define TTY_TILES_PATCH
+
+#ifdef TTY_TILES_PATCH
+#ifndef USE_TILES
+#define USE_TILES
+#endif
+#endif
+
 
 /*
  * Define the default window system.  This should be one that is compiled
@@ -112,12 +121,6 @@
 #  define DEFAULT_WINDOW_SYS "mswin"
 # endif
 # define HACKDIR "\\nethack"
-#endif
-
-#ifdef CURSES_GRAPHICS
-# ifndef DEFAULT_WINDOW_SYS
-#  define DEFAULT_WINDOW_SYS "curses"
-# endif
 #endif
 
 #ifndef DEFAULT_WINDOW_SYS
@@ -351,7 +354,7 @@ typedef long glyph_t;
 #endif
 
 #define EXP_ON_BOTL	/* Show experience on bottom line */
-/* #define SCORE_ON_BOTL */	/* added by Gary Erickson (erickson@ucivax) */
+#define SCORE_ON_BOTL	/* added by Gary Erickson (erickson@ucivax) */
 
 /*
  * Section 5:  EXPERIMENTAL STUFF
@@ -361,8 +364,95 @@ typedef long glyph_t;
  * bugs left here.
  */
 
+#if defined(TTY_GRAPHICS) || defined(MSWIN_GRAPHICS)
+# define MENU_COLOR
+# define MENU_COLOR_REGEX
+# define MENU_COLOR_REGEX_POSIX
+/* if MENU_COLOR_REGEX is defined, use regular expressions (regex.h,
+ * GNU specific functions by default, POSIX functions with
+ * MENU_COLOR_REGEX_POSIX).
+ * otherwise use pmatch() to match menu color lines.
+ * pmatch() provides basic globbing: '*' and '?' wildcards.
+ */
+#endif
+
+#define STATUS_COLORS /* Shachaf & Oren Ben-Kiki */
+
+#ifdef TTY_GRAPHICS
+# define WIN_EDGE	/* windows aligned left&top */
+#endif
+
 /*#define GOLDOBJ */	/* Gold is kept on obj chains - Helge Hafting */
-/*#define AUTOPICKUP_EXCEPTIONS */ /* exceptions to autopickup */
+#define AUTOPICKUP_EXCEPTIONS  /* exceptions to autopickup */
+
+#define DUMP_LOG        /* Dump game end information to a file */
+#define DUMP_FN "/dgldir/userdata/%N/%n/dumplog/%t.nh343.txt"      /* Fixed dumpfile name, if you want
+                                   * to prevent definition by users */
+#define DUMPMSGS 20     /* Number of latest messages in the dump file  */
+
+/* In the following filename definitions, you can use the some string substitutions:
+  %n = player's name
+  %N = first character of player's name
+  %t = character's starting time, in unix epoch format
+*/
+
+/* Filename for the wizard-mode command for dumping the map data.
+   Can be left undefined, in which case the wiz-mode command does nothing. */
+#define MAPDUMP_FN "/dgldir/userdata/%N/%n/nh343.mapdump"
+
+/* Filename for where HUPping a game is saved.
+   Can be left undefined, in which case HUPping doesn't write the data. */
+#define HUPLIST_FN "/dgldir/userdata/%N/%n/hanguplist.txt"
+
+/* Filename for dgamelaunch extra info field.
+   Can be left undefined for not writing extrainfo. */
+#define EXTRAINFO_FN "/dgldir/extrainfo-nh343/%n.extrainfo"
+
+#define SHOW_BORN    /* extinct & showborn -patch */
+#define SHOW_EXTINCT
+
+#define SORTLOOT /* sortloot -patch */
+
+#define SIMPLE_MAIL  /* dgamelaunch simple mail */
+
+#define PARANOID /* paranoid quit &c */
+
+/* If this file exists, players get a message from the user defined
+   in the file.  The file format is "username:message to be shown" all
+   in one line.  Can be left undefined to disable the feature.
+   Requires UNIX
+*/
+/* #define SERVER_ADMIN_MSG "admin_msg" */
+
+#define LIVELOGFILE "livelog"
+
+#define XLOGFILE "xlogfile"  /* even larger logfile */
+/* #define REALTIME_ON_BOTL */  /* Show elapsed time on bottom line.  Note:
+                                 * this breaks savefile compatibility. */
+/* The options in this section require the extended logfile support */
+#ifdef XLOGFILE
+#define RECORD_CONDUCT  /* Record conducts kept in logfile */
+#define RECORD_TURNS    /* Record turns elapsed in logfile */
+#define RECORD_ACHIEVE  /* Record certain notable achievements in the
+                         * logfile.  Note: this breaks savefile compatibility
+                         * due to the addition of the u_achieve struct. */
+#define RECORD_REALTIME /* Record the amount of actual playing time (in
+                         * seconds) in the record file.  Note: this breaks
+                         * savefile compatibility. */
+#define RECORD_START_END_TIME /* Record to-the-second starting and ending
+                               * times; stored as 32-bit values obtained
+                               * from time(2) (seconds since the Epoch.) */
+#define RECORD_GENDER0   /* Record initial gender in logfile */
+#define RECORD_ALIGN0   /* Record initial alignment in logfile */
+#endif
+
+/* Write out player's current location to this file.
+   Can be left undefined, which will disable the feature. */
+#define WHEREIS_FILE "whereis/%n.whereis"
+
+#define USER_DUNGEONCOLOR
+
+#define BONES_POOL /* Multiple bones files per level */
 
 /* End of Section 5 */
 

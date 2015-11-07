@@ -591,7 +591,7 @@ unsigned trflags;
 	boolean webmsgok = (!(trflags & NOWEBMSG));
 	boolean forcebungle = (trflags & FORCEBUNGLE);
 
-	nomul(0);
+	nomul(0, NULL);
 
 	/* KMH -- You can't escape the Sokoban level traps */
 	if (In_sokoban(&u.uz) &&
@@ -1415,7 +1415,7 @@ int style;
 				break;
 			}
 		} else if (bhitpos.x == u.ux && bhitpos.y == u.uy) {
-			if (multi) nomul(0);
+			if (multi) nomul(0, NULL);
 			if (thitu(9 + singleobj->spe,
 				  dmgval(singleobj, &youmonst),
 				  singleobj, (char *)0))
@@ -2678,12 +2678,15 @@ xchar x, y;
     return retval;
 }
 
-void
+/* returns TRUE if obj is destroyed */
+boolean
 water_damage(obj, force, here)
 register struct obj *obj;
 register boolean force, here;
 {
 	struct obj *otmp;
+	struct obj *obj_original = obj;
+	boolean obj_destroyed = FALSE;
 
 	/* Scrolls, spellbooks, potions, weapons and
 	   pieces of armor may get affected by the water */
@@ -2724,6 +2727,7 @@ register boolean force, here;
 				/* damage player/monster? */
 				pline("A potion explodes!");
 				delobj(obj);
+				obj_destroyed = (obj == obj_original);
 				continue;
 			} else if (obj->odiluted) {
 				obj->otyp = POT_WATER;
@@ -2740,7 +2744,9 @@ register boolean force, here;
 			   (uarmc->cursed && !rn2(3)))
 				obj->oeroded++;
 		}
+		obj_destroyed = FALSE;
 	}
+	return obj_destroyed;
 }
 
 /*
@@ -3741,7 +3747,7 @@ boolean disarm;
 		case 3:
 			if (!Free_action) {                        
 			pline("Suddenly you are frozen in place!");
-			nomul(-d(5, 6));
+			nomul(-d(5, 6), "frozen by a trap");
 			exercise(A_DEX, FALSE);
 			nomovemsg = You_can_move_again;
 			} else You("momentarily stiffen.");
@@ -3798,10 +3804,12 @@ register struct trap *trap;
 {
 	register struct trap *ttmp;
 
+	if (!trap) return;
 	if(trap == ftrap)
 		ftrap = ftrap->ntrap;
 	else {
-		for(ttmp = ftrap; ttmp->ntrap != trap; ttmp = ttmp->ntrap) ;
+		for(ttmp = ftrap; ttmp && ttmp->ntrap != trap; ttmp = ttmp->ntrap) ;
+		if (!ttmp) return;
 		ttmp->ntrap = trap->ntrap;
 	}
 	dealloc_trap(trap);
@@ -3948,6 +3956,12 @@ lava_effects()
 	for(obj = invent; obj; obj = obj2) {
 	    obj2 = obj->nobj;
 	    if(is_organic(obj) && !obj->oerodeproof) {
+	        if (obj->otyp == SPE_BOOK_OF_THE_DEAD) {
+		  if (!Blind && usurvive)
+		    pline("%s glows a strange %s, but remains intact.",
+			  The(xname(obj)), hcolor("dark red"));
+		  continue;
+		}
 		if(obj->owornmask) {
 		    if (usurvive)
 			Your("%s into flame!", aobjnam(obj, "burst"));

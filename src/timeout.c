@@ -30,12 +30,14 @@ stoned_dialogue()
 {
 	register long i = (Stoned & TIMEOUT);
 
-	if (i > 0L && i <= SIZE(stoned_texts))
+	if (i > 0L && i <= SIZE(stoned_texts)) {
 		pline(stoned_texts[SIZE(stoned_texts) - i]);
+		nomul(0, NULL); /* fix for C343-74 */
+	}
 	if (i == 5L)
 		HFast = 0L;
 	if (i == 3L)
-		nomul(-3);
+		nomul(-3, "getting stoned");
 	exercise(A_DEX, FALSE);
 }
 
@@ -137,7 +139,7 @@ slime_dialogue()
 	if (i == 3L) {	/* limbs becoming oozy */
 	    HFast = 0L;	/* lose intrinsic speed */
 	    stop_occupation();
-	    if (multi > 0) nomul(0);
+	    if (multi > 0) nomul(0, NULL);
 	}
 	exercise(A_DEX, FALSE);
 }
@@ -327,7 +329,7 @@ nh_timeout()
 			/* otherwise handle fumbling msgs locally. */
 			if (u.umoved && !Levitation) {
 			    slip_or_trip();
-			    nomul(-2);
+			    nomul(-2, "fumbling");
 			    nomovemsg = "";
 			    /* The more you are carrying the more likely you
 			     * are to make noise when you fumble.  Adjustments
@@ -362,7 +364,7 @@ int how_long;
 boolean wakeup_msg;
 {
 	stop_occupation();
-	nomul(how_long);
+	nomul(how_long, "sleeping");
 	/* generally don't notice sounds while sleeping */
 	if (wakeup_msg && multi == how_long) {
 	    /* caller can follow with a direct call to Hear_again() if
@@ -1220,7 +1222,7 @@ do_storms()
 	pline("Kaboom!!!  Boom!!  Boom!!");
 	if(!u.uinvulnerable) {
 	    stop_occupation();
-	    nomul(-3);
+	    nomul(-3, "hiding from thunderstorm");
 	}
     } else
 	You_hear("a rumbling noise.");

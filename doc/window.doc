@@ -564,7 +564,7 @@ use_inverse	-- port should display inverse when NetHack asks for it.
 vary_msgcount	-- port should display this number of messages at a time in
 		   the message window.
 windowborders   -- port should display borders around main NetHack windows.
-                Can be set to (1) on, (2) off, or (3) auto.
+                   Can be set to (1) on, (2) off, or (3) auto.
 windowcolors
 		-- port should use these colors for window foreground/background
 		   colors.  Syntax:

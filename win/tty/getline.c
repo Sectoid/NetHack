@@ -68,10 +68,20 @@ getlin_hook_proc hook;
 #endif /* not NEWAUTOCOMP */
 			break;
 		}
-		if(c == '\033') {
-			*obufp = c;
-			obufp[1] = 0;
-			break;
+		if(c == DOESCAPE) {
+		  if (obufp[0] != '\0') {
+		    obufp[0] = 0;
+		    bufp = obufp;
+		    tty_clear_nhwindow(WIN_MESSAGE);
+		    cw->maxcol = cw->maxrow;
+		    addtopl(query);
+		    addtopl(" ");
+		    addtopl(obufp);
+		  } else {
+		    *obufp = c;
+		    obufp[1] = 0;
+		    break;
+		  }
 		}
 		if (ttyDisplay->intr) {
 		    ttyDisplay->intr--;
@@ -193,6 +203,7 @@ register const char *s;	/* chars allowed besides return */
 	    }
 	    tty_nhbell();
 	}
+	if (c == -1) break; /* lost terminal or other error */
     }
 
 }
@@ -220,6 +231,7 @@ ext_cmd_getlin_hook(base)
 
 	com_index = -1;
 	for (oindex = 0; extcmdlist[oindex].ef_txt != (char *)0; oindex++) {
+		if (!extcmdlist[oindex].autocomplete) continue;
 		if (!strncmpi(base, extcmdlist[oindex].ef_txt, strlen(base))) {
 			if (com_index == -1)	/* no matches yet */
 			    com_index = oindex;
@@ -255,7 +267,7 @@ tty_get_ext_cmd()
 	hooked_tty_getlin("#", buf, ext_cmd_getlin_hook);
 #endif
 	(void) mungspaces(buf);
-	if (buf[0] == 0 || buf[0] == '\033') return -1;
+	if (buf[0] == 0 || buf[0] == DOESCAPE) return -1;
 
 	for (i = 0; extcmdlist[i].ef_txt != (char *)0; i++)
 		if (!strcmpi(buf, extcmdlist[i].ef_txt)) break;

@@ -490,9 +490,8 @@ glyph_t curses_convert_glyph(int ch, glyph_t glyph)
     }
 
     
-//#define _wide(val) W##val
+
 #define _wide(val) W##val->chars[0]
-//#define _wide(val) val;
     switch (symbol)
     {
         case S_vwall:

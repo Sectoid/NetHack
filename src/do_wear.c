@@ -94,7 +94,9 @@ STATIC_PTR
 int
 Boots_on()
 {
-    long oldprop =
+    long oldprop;
+    if (!uarmf) return 0;
+    oldprop =
 	u.uprops[objects[uarmf->otyp].oc_oprop].extrinsic & ~WORN_BOOTS;
 
     switch(uarmf->otyp) {
@@ -196,7 +198,9 @@ Boots_off()
 STATIC_OVL int
 Cloak_on()
 {
-    long oldprop =
+    long oldprop;
+    if (!uarmc) return 0;
+    oldprop =
 	u.uprops[objects[uarmc->otyp].oc_oprop].extrinsic & ~WORN_CLOAK;
 
     switch(uarmc->otyp) {
@@ -292,6 +296,7 @@ STATIC_PTR
 int
 Helmet_on()
 {
+    if (!uarmh) return 0;
     switch(uarmh->otyp) {
 	case FEDORA:
 	case HELMET:
@@ -392,7 +397,9 @@ STATIC_PTR
 int
 Gloves_on()
 {
-    long oldprop =
+    long oldprop;
+    if (!uarmg) return 0;
+    oldprop =
 	u.uprops[objects[uarmg->otyp].oc_oprop].extrinsic & ~WORN_GLOVES;
 
     switch(uarmg->otyp) {
@@ -577,6 +584,7 @@ Armor_gone()
 STATIC_OVL void
 Amulet_on()
 {
+    if (!uamul) return;
     switch(uamul->otyp) {
 	case AMULET_OF_ESP:
 	case AMULET_OF_LIFE_SAVING:
@@ -1078,7 +1086,11 @@ dotakeoff()
 			  "  Use 'R' command to remove accessories." : "");
 		return 0;
 	}
-	if (armorpieces > 1)
+	if (armorpieces > 1
+#ifdef PARANOID
+	    || iflags.paranoid_remove
+#endif
+	    )
 		otmp = getobj(clothes, "take off");
 	if (otmp == 0) return(0);
 	if (!(otmp->owornmask & W_ARMOR)) {
@@ -1128,7 +1140,11 @@ doremring()
 		      "  Use 'T' command to take off armor." : "");
 		return(0);
 	}
-	if (Accessories != 1) otmp = getobj(accessories, "remove");
+	if (Accessories != 1
+#ifdef PARANOID
+	    || iflags.paranoid_remove
+#endif
+	    ) otmp = getobj(accessories, "remove");
 	if(!otmp) return(0);
 	if(!(otmp->owornmask & (W_RING | W_AMUL | W_TOOL))) {
 		You("are not wearing that.");
@@ -1184,7 +1200,7 @@ register struct obj *otmp;
 
 	if(cursed(otmp)) return(0);
 	if(delay) {
-		nomul(delay);
+		nomul(delay, "disrobing");
 		if (is_helmet(otmp)) {
 			nomovemsg = "You finish taking off your helmet.";
 			afternmv = Helmet_off;
@@ -1441,7 +1457,7 @@ dowear()
 	setworn(otmp, mask);
 	delay = -objects[otmp->otyp].oc_delay;
 	if(delay){
-		nomul(delay);
+		nomul(delay, "dressing up");
 		if(is_boots(otmp)) afternmv = Boots_on;
 		if(is_helmet(otmp)) afternmv = Helmet_on;
 		if(is_gloves(otmp)) afternmv = Gloves_on;

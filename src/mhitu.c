@@ -317,7 +317,7 @@ mattacku(mtmp)
 		 * invisible, or you might be blind....
 		 */
 	
-	if(!ranged) nomul(0);
+	if(!ranged) nomul(0, NULL);
 	if(mtmp->mhp <= 0 || (Underwater && !is_swimmer(mtmp->data)))
 	    return(0);
 
@@ -943,6 +943,10 @@ hitmu(mtmp, mattk)
 				goto do_stone;
 			}
 			dmg += dmgval(otmp, &youmonst);
+			if (objects[otmp->otyp].oc_material == SILVER &&
+			    hates_silver(youmonst.data)) {
+			  pline("The silver sears your flesh!");
+			}
 			if (dmg <= 0) dmg = 1;
 			if (!(otmp->oartifact &&
 				artifact_hit(mtmp, &youmonst, otmp, &dmg,dieroll)))
@@ -1122,7 +1126,7 @@ dopois:
 			if (Blind) You("are frozen!");
 			else You("are frozen by %s!", mon_nam(mtmp));
 			nomovemsg = 0;	/* default: "you can move again" */
-			nomul(-rnd(10));
+			nomul(-rnd(10), "paralyzed by a monster");
 			exercise(A_DEX, FALSE);
 		    }
 		}
@@ -2618,13 +2622,15 @@ cloneu()
 	if (u.mh <= 1) return(struct monst *)0;
 	if (mvitals[mndx].mvflags & G_EXTINCT) return(struct monst *)0;
 	mon = makemon(youmonst.data, u.ux, u.uy, NO_MINVENT|MM_EDOG);
-	mon = christen_monst(mon, plname);
-	initedog(mon);
-	mon->m_lev = youmonst.data->mlevel;
-	mon->mhpmax = u.mhmax;
-	mon->mhp = u.mh / 2;
-	u.mh -= mon->mhp;
-	flags.botl = 1;
+	if (mon) {
+	    mon = christen_monst(mon, plname);
+	    initedog(mon);
+	    mon->m_lev = youmonst.data->mlevel;
+	    mon->mhpmax = u.mhmax;
+	    mon->mhp = u.mh / 2;
+	    u.mh -= mon->mhp;
+	    flags.botl = 1;
+	}
 	return(mon);
 }
 

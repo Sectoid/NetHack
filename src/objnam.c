@@ -15,6 +15,9 @@ static boolean FDECL(wishymatch, (const char *,const char *,BOOLEAN_P));
 #endif
 static char *NDECL(nextobuf);
 static void FDECL(add_erosion_words, (struct obj *, char *));
+#ifdef SORTLOOT
+char * FDECL(xname2, (struct obj *, boolean));
+#endif
 
 struct Jitem {
 	int item;
@@ -233,6 +236,15 @@ boolean juice;	/* whether or not to append " juice" to the name */
 char *
 xname(obj)
 register struct obj *obj;
+#ifdef SORTLOOT
+{
+	return xname2(obj, FALSE);
+}
+char *
+xname2(obj, ignore_oquan)
+register struct obj *obj;
+boolean ignore_oquan;
+#endif
 {
 	register char *buf;
 	register int typ = obj->otyp;
@@ -469,6 +481,9 @@ register struct obj *obj;
 	default:
 		Sprintf(buf,"glorkum %d %d %d", obj->oclass, typ, obj->spe);
 	}
+#ifdef SORTLOOT
+	if (!ignore_oquan)
+#endif
 	if (obj->quan != 1L) Strcpy(buf, makeplural(buf));
 
 	if (obj->onamelth && obj->dknown) {
@@ -554,8 +569,9 @@ char *prefix;
 }
 
 char *
-doname(obj)
+doname_base(obj, with_price)
 register struct obj *obj;
+boolean with_price;
 {
 	boolean ispoisoned = FALSE;
 	char prefix[PREFIX];
@@ -600,7 +616,7 @@ register struct obj *obj;
 		Strcat(prefix, "cursed ");
 	    else if (obj->blessed)
 		Strcat(prefix, "blessed ");
-	    else if ((!obj->known || !objects[obj->otyp].oc_charged ||
+	    else if (iflags.show_buc || (!obj->known || !objects[obj->otyp].oc_charged ||
 		      (obj->oclass == ARMOR_CLASS ||
 		       obj->oclass == RING_CLASS))
 		/* For most items with charges or +/-, if you know how many
@@ -775,6 +791,11 @@ ring:
 			quotedprice += contained_cost(obj, shkp, 0L, FALSE, TRUE);
 		Sprintf(eos(bp), " (unpaid, %ld %s)",
 			quotedprice, currency(quotedprice));
+        } else if (with_price) {
+	    long price = get_cost_of_shop_item(obj);
+	    if (price > 0) {
+		Sprintf(eos(bp), " (%ld %s)", price, currency(price));
+	    }
 	}
 	if (!strncmp(prefix, "a ", 2) &&
 			index(vowels, *(prefix+2) ? *(prefix+2) : *bp)
@@ -788,6 +809,23 @@ ring:
 	bp = strprepend(bp, prefix);
 	return(bp);
 }
+
+/** Wrapper function for vanilla behaviour. */
+char *
+doname(obj)
+     register struct obj *obj;
+{
+    return doname_base(obj, FALSE);
+}
+
+/** Name of object including price. */
+char *
+doname_with_price(obj)
+     register struct obj *obj;
+{
+    return doname_base(obj, iflags.show_shop_prices);
+}
+
 
 #endif /* OVL0 */
 #ifdef OVLB
@@ -853,6 +891,16 @@ struct obj *obj;
 	    return corpse_xname(obj, FALSE);
 	return xname(obj);
 }
+#ifdef SORTLOOT
+char *
+cxname2(obj)
+struct obj *obj;
+{
+	if (obj->otyp == CORPSE)
+	    return corpse_xname(obj, TRUE);
+	return xname2(obj, TRUE);
+}
+#endif /* SORTLOOT */
 
 /* treat an object as fully ID'd when it might be used as reason for death */
 char *

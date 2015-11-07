@@ -833,6 +833,20 @@ register struct obj *obj, *merge;
 #endif
 		}
 	}
+
+	if (obj == uwep) uwepgone();
+	else if (obj == uswapwep) uswapwepgone();
+	else if (obj == uquiver) uqwepgone();
+	else if (obj == uarm) setnotworn(obj);
+	else if (obj == uarmc) setnotworn(obj);
+	else if (obj == uarmh) setnotworn(obj);
+	else if (obj == uarms) setnotworn(obj);
+	else if (obj == uarmg) setnotworn(obj);
+#ifdef TOURIST
+	else if (obj == uarmu) setnotworn(obj);
+#endif
+	else if (obj == uarmf) setnotworn(obj);
+
 	dealloc_obj(obj);
 }
 #endif /* OVLB */
@@ -1392,7 +1406,10 @@ proceed:
 	}
 	/* now check items on bill */
 	if (eshkp->billct) {
-	    register boolean itemize;
+	    boolean itemize = FALSE;
+	    /* get item selected by inventory menu */
+	    struct obj* payme_item = getnextgetobj();
+
 #ifndef GOLDOBJ
 	    if (!u.ugold && !eshkp->credit) {
 #else
@@ -1418,7 +1435,9 @@ proceed:
 
 	    /* this isn't quite right; it itemizes without asking if the
 	     * single item on the bill is partly used up and partly unpaid */
-	    itemize = (eshkp->billct > 1 ? yn("Itemized billing?") == 'y' : 1);
+	    if (!payme_item) {
+		    itemize = (eshkp->billct > 1 ? yn("Itemized billing?") == 'y' : 1);
+	    }
 
 	    for (pass = 0; pass <= 1; pass++) {
 		tmp = 0;
@@ -1444,25 +1463,29 @@ proceed:
 			 * are processed on both passes */
 			tmp++;
 		    } else {
-			switch (dopayobj(shkp, bp, &otmp, pass, itemize)) {
-			  case PAY_CANT:
-				return 1;	/*break*/
-			  case PAY_BROKE:
-				paid = TRUE;
-				goto thanks;	/*break*/
-			  case PAY_SKIP:
-				tmp++;
-				continue;	/*break*/
-			  case PAY_SOME:
-				paid = TRUE;
+			if (payme_item == NULL || payme_item == otmp) {
+				switch (dopayobj(shkp, bp, &otmp, pass, itemize)) {
+					case PAY_CANT:
+						return 1;	/*break*/
+					case PAY_BROKE:
+						paid = TRUE;
+						goto thanks;	/*break*/
+					case PAY_SKIP:
+						tmp++;
+						continue;	/*break*/
+					case PAY_SOME:
+						paid = TRUE;
+						if (itemize) bot();
+						continue;	/*break*/
+					case PAY_BUY:
+						paid = TRUE;
+						break;
+				}
 				if (itemize) bot();
-				continue;	/*break*/
-			  case PAY_BUY:
-				paid = TRUE;
-				break;
+				*bp = eshkp->bill_p[--eshkp->billct];
+			} else {
+				tmp++;
 			}
-			if (itemize) bot();
-			*bp = eshkp->bill_p[--eshkp->billct];
 		    }
 		}
 	    }
@@ -1840,6 +1863,38 @@ unsigned id;
 }
 #endif /*OVLB*/
 #ifdef OVL3
+
+
+/** Returns the price of an arbitrary item in the shop.
+ * Returns 0 if the item doesn't belong to a shopkeeper. */
+long
+get_cost_of_shop_item(obj)
+     register struct obj *obj;
+{
+    struct monst *shkp;
+    xchar x, y;
+    int cost=0;
+
+    if (get_obj_location(obj, &x, &y, 0) &&
+	(obj->unpaid ||
+	 (obj->where==OBJ_FLOOR && !obj->no_charge && costly_spot(x,y)))) {
+
+	if (!(shkp = shop_keeper(*in_rooms(x, y, SHOPBASE)))) return 0;
+	if (!inhishop(shkp)) return 0;
+	if (!costly_spot(x, y)) return 0;
+	if (!*u.ushops) return 0;
+
+	if (obj->oclass != COIN_CLASS) {
+	    cost = (obj == uball || obj == uchain) ? 0L :
+		obj->quan * get_cost(obj, shkp);
+	    if (Has_contents(obj)) {
+		cost += contained_cost(obj, shkp, 0L, FALSE, FALSE);
+	    }
+	}
+    }
+    return cost;
+}
+
 
 /* calculate the value that the shk will charge for [one of] an object */
 STATIC_OVL long

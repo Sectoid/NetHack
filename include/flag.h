@@ -172,6 +172,9 @@ struct instance_flags {
 	boolean  menu_requested; /* Flag for overloaded use of 'm' prefix
 				  * on some non-move commands */
 	uchar num_pad_mode;
+
+    int bones;
+
 	int	menu_headings;	/* ATR for menu headings */
 	int      purge_monsters;	/* # of dead monsters still on fmon list */
 	int *opt_booldup;	/* for duplication of boolean opts in config file */
@@ -179,6 +182,9 @@ struct instance_flags {
 	uchar	bouldersym;	/* symbol for boulder display */
 	boolean travel1;	/* first travel step */
 	coord	travelcc;	/* coordinates for travel_cache */
+#ifdef SIMPLE_MAIL
+	boolean simplemail;	/* simple mail format $NAME:$MESSAGE */
+#endif
 #ifdef WIZARD
 	boolean  sanity_check;	/* run sanity checks */
 	boolean  mon_polycontrol;	/* debug: control monster polymorphs */
@@ -189,6 +195,16 @@ struct instance_flags {
 #if defined(TTY_GRAPHICS) || defined(CURSES_GRAPHICS)
 	boolean  extmenu;	/* extended commands use menu interface */
 #endif
+#ifdef MENU_COLOR
+	boolean use_menu_color;	/* use color in menus; only if wc_color */
+#endif
+#ifdef WIN_EDGE
+	boolean  win_edge;	/* are the menus aligned left&top */
+#endif
+#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
+    boolean use_status_colors; /* use color in status line; only if wc_color */
+#endif
+    boolean hitpointbar;
 #ifdef MFLOPPY
 	boolean  checkspace;	/* check disk space before writing files */
 				/* (in iflags to allow restore after moving
@@ -222,6 +238,30 @@ struct instance_flags {
 	boolean lan_mail;	/* mail is initialized */
 	boolean lan_mail_fetched; /* mail is awaiting display */
 #endif
+#ifdef SHOW_BORN
+	boolean show_born;	/* show numbers of created monsters */
+#endif
+#ifdef SORTLOOT
+	char sortloot;          /* sort items to loot alphabetically */
+#endif
+#ifdef PARANOID
+	boolean  paranoid_hit;  /* Ask for 'yes' when hitting peacefuls */
+	boolean  paranoid_quit; /* Ask for 'yes' when quitting */
+	boolean  paranoid_remove; /* Always show menu for 'T' and 'R' */
+#endif
+#ifdef USE_TILES
+	boolean  vt_nethack;
+#endif
+	boolean  quiver_fired;
+       boolean  pickup_thrown;
+    boolean msgtype_regex;
+    boolean ape_regex;
+    boolean show_shop_prices;
+    boolean item_use_menu;
+    boolean notice_walls;
+    boolean use_menu_glyphs;
+    boolean hilite_hidden_stairs;
+    boolean hilite_obj_piles;
 /*
  * Window capability support.
  */
@@ -274,7 +314,15 @@ struct instance_flags {
     int     wc2_windowborders;  /* display borders on NetHack windows */
     int     wc2_petattr;        /* points to text attributes for pet */
     boolean wc2_guicolor;       /* allow colors in GUI (outside map) */
+	boolean wc2_darkgray;		/* try to use PC dark-gray color
+					 * to represent black object */
 
+  boolean botl_updates;
+  boolean hp_notify;
+  char *hp_notify_fmt;
+  boolean old_C_behaviour;
+        boolean show_buc;
+	boolean show_obj_sym;
 	boolean  cmdassist;	/* provide detailed assistance for some commands */
 	boolean	 obsolete;	/* obsolete options can point at this, it isn't used */
 	/* Items which belong in flags, but are here to allow save compatibility */
@@ -290,6 +338,9 @@ struct instance_flags {
 #ifdef WIN32CON
 #define MAX_ALTKEYHANDLER 25
 	char	 altkeyhandler[MAX_ALTKEYHANDLER];
+#endif
+#ifdef REALTIME_ON_BOTL
+  boolean  showrealtime; /* show actual elapsed time */
 #endif
 };
 

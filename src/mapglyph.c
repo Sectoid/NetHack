@@ -25,7 +25,11 @@ int explcolors[] = {
 
 #ifdef TEXTCOLOR
 #define zap_color(n)  color = iflags.use_color ? zapcolors[n] : NO_COLOR
+#ifndef USER_DUNGEONCOLOR
 #define cmap_color(n) color = iflags.use_color ? defsyms[n].color : NO_COLOR
+#else
+#define cmap_color(n) color = iflags.use_color ? showsymcolors[n] : NO_COLOR
+#endif
 #define obj_color(n)  color = iflags.use_color ? objects[n].oc_color : NO_COLOR
 #define mon_color(n)  color = iflags.use_color ? mons[n].mcolor : NO_COLOR
 #define invis_color(n) color = NO_COLOR
@@ -156,12 +160,24 @@ unsigned *ospecial;
 	    /* provide a visible difference if normal and lit corridor
 	     * use the same symbol */
 	    if (iflags.use_color &&
+#ifndef USER_DUNGEONCOLOR
 		offset == S_litcorr && ch == showsyms[S_corr])
 		color = CLR_WHITE;
+#else
+		offset == S_litcorr && ch == showsyms[S_corr] &&
+		    showsymcolors[S_corr] == showsymcolors[S_litcorr]) {
+	if (showsymcolors[S_corr] != CLR_WHITE) {
+	    color = showsymcolors[S_litcorr] = CLR_WHITE;
+	} else {
+	    color = showsymcolors[S_litcorr] = CLR_GRAY;
+	}
+    }
+#endif /* USER_DUNGEONCOLOR */
 	    else
 #endif
 	    cmap_color(offset);
     } else if ((offset = (glyph - GLYPH_OBJ_OFF)) >= 0) {	/* object */
+	if (On_stairs(x,y) && levl[x][y].seenv) special |= MG_STAIRS;
 	if (offset == BOULDER && iflags.bouldersym) ch = iflags.bouldersym;
 	else ch = get_objsym(offset);
 #ifdef ROGUE_COLOR
@@ -174,6 +190,11 @@ unsigned *ospecial;
 	} else
 #endif
 	    obj_color(offset);
+	if (offset != BOULDER &&
+	    level.objects[x][y] &&
+	    level.objects[x][y]->nexthere) {
+	    special |= MG_OBJPILE;
+	}
     } else if ((offset = (glyph - GLYPH_RIDDEN_OFF)) >= 0) {	/* mon ridden */
 	ch = get_monsym(offset);
 #ifdef ROGUE_COLOR
@@ -187,6 +208,7 @@ unsigned *ospecial;
 	    mon_color(offset);
 	    special |= MG_RIDDEN;
     } else if ((offset = (glyph - GLYPH_BODY_OFF)) >= 0) {	/* a corpse */
+	if (On_stairs(x,y) && levl[x][y].seenv) special |= MG_STAIRS;
 	ch = get_objsym(CORPSE);
 #ifdef ROGUE_COLOR
 	if (HAS_ROGUE_IBM_GRAPHICS && iflags.use_color)
@@ -195,6 +217,11 @@ unsigned *ospecial;
 #endif
 	    mon_color(offset);
 	    special |= MG_CORPSE;
+	if (offset != BOULDER &&
+	    level.objects[x][y] &&
+	    level.objects[x][y]->nexthere) {
+	    special |= MG_OBJPILE;
+	}
     } else if ((offset = (glyph - GLYPH_DETECT_OFF)) >= 0) {	/* mon detect */
 	ch = get_monsym(offset);
 #ifdef ROGUE_COLOR

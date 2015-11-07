@@ -192,10 +192,7 @@ get_unicode_codepoint(int ch)
 }
 
 /** Prints a Unicode codepoint as UTF-8 encoded byte sequence.
- * Originally from Ray Chason's Unicode proof of concept patch.
- * TODO(john@mcdole.org): look to see if we have wide character support and
- *                        just write that character (cursesw)
- */
+ * Originally from Ray Chason's Unicode proof of concept patch. */
 int
 pututf8char(glyph_t c)
 {

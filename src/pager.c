@@ -11,8 +11,6 @@
 STATIC_DCL boolean FDECL(is_swallow_sym, (int));
 STATIC_DCL int FDECL(append_str, (char *, const char *));
 STATIC_DCL struct permonst * FDECL(lookat, (int, int, char *, char *));
-STATIC_DCL void FDECL(checkfile,
-		      (char *,struct permonst *,BOOLEAN_P,BOOLEAN_P));
 STATIC_DCL int FDECL(do_look, (BOOLEAN_P));
 STATIC_DCL boolean FDECL(help_menu, (int *));
 #ifdef PORT_HELP
@@ -298,7 +296,7 @@ lookat(x, y, buf, monbuf)
  *	 lcase() for data.base lookup so that we can have a clean key.
  *	 Therefore, we create a copy of inp _just_ for data.base lookup.
  */
-STATIC_OVL void
+void
 checkfile(inp, pm, user_typed_name, without_asking)
     char *inp;
     struct permonst *pm;
@@ -875,8 +873,9 @@ static const char *help_menu_items[] = {
 /* 4*/	"Info on what a given key does.",
 /* 5*/	"List of game options.",
 /* 6*/	"Longer explanation of game options.",
-/* 7*/	"List of extended commands.",
-/* 8*/	"The NetHack license.",
+/* 7*/  "Full list of keyboard commands.",
+/* 8*/	"List of extended commands.",
+/* 9*/	"The NetHack license.",
 #ifdef PORT_HELP
 	"%s-specific help and commands.",
 #define PORT_HELP_ID 100
@@ -949,8 +948,9 @@ dohelp()
 			case  4:  (void) dowhatdoes();  break;
 			case  5:  option_help();  break;
 			case  6:  display_file(OPTIONFILE, TRUE);  break;
-			case  7:  (void) doextlist();  break;
-			case  8:  display_file(LICENSE, TRUE);  break;
+			case  7:  dokeylist(); break;
+			case  8:  (void) doextlist();  break;
+			case  9:  display_file(LICENSE, TRUE);  break;
 #ifdef WIZARD
 			/* handle slot 9 or 10 */
 			default: display_file(DEBUGHELP, TRUE);  break;

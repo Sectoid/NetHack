@@ -54,7 +54,9 @@ char *argv[];
 	register char *dir;
 #endif
 	boolean exact_username;
-
+#ifdef SIMPLE_MAIL
+	char* e_simple = NULL;
+#endif
 #if defined(__APPLE__)
 	/* special hack to change working directory to a resource fork when
 	   running from finder --sam */
@@ -82,6 +84,12 @@ char *argv[];
 		free(mac_tmp);
 	    }
 	}
+#endif
+
+#ifdef SIMPLE_MAIL
+	/* figure this out early */
+	e_simple = nh_getenv("SIMPLEMAIL");
+	iflags.simplemail = (e_simple ? 1 : 0);
 #endif
 
 	hname = argv[0];
@@ -163,10 +171,6 @@ char *argv[];
 	 * It seems you really want to play.
 	 */
 	u.uhp = 1;	/* prevent RIP on early quits */
-	(void) signal(SIGHUP, (SIG_RET_TYPE) hangup);
-#ifdef SIGXCPU
-	(void) signal(SIGXCPU, (SIG_RET_TYPE) hangup);
-#endif
 
 	process_options(argc, argv);	/* command line options */
 
@@ -182,8 +186,8 @@ char *argv[];
 		Strcpy(plname, "wizard");
 	else
 #endif
-	if(!*plname || !strncmp(plname, "player", 4)
-		    || !strncmp(plname, "games", 4)) {
+	if(!*plname /*|| !strncmp(plname, "player", 4)
+		      || !strncmp(plname, "games", 4)*/) {
 		askname();
 	} else if (exact_username) {
 		/* guard against user names with hyphens in them */
@@ -205,6 +209,7 @@ char *argv[];
 		 */
 		(void) signal(SIGQUIT,SIG_IGN);
 		(void) signal(SIGINT,SIG_IGN);
+		(void) signal(SIGHUP,SIG_IGN);
 		if(!locknum)
 			Sprintf(lock, "%d%s", (int)getuid(), plname);
 		getlock();
@@ -214,6 +219,11 @@ char *argv[];
 		getlock();
 	}
 #endif /* WIZARD */
+
+	(void) signal(SIGHUP, (SIG_RET_TYPE) hangup);
+#ifdef SIGXCPU
+	(void) signal(SIGXCPU, (SIG_RET_TYPE) hangup);
+#endif
 
 	dlb_init();	/* must be before newgame() */
 

@@ -73,6 +73,90 @@ doread()
     "Don't Panic",				/* HHGTTG */
     "Furinkan High School Athletic Dept.",	/* Ranma 1/2 */
     "Hel-LOOO, Nurse!",			/* Animaniacs */
+    "=^.^=",
+    "100% goblin hair - do not wash",
+    "Aberzombie and Fitch",
+    "Aim >>> <<< here",
+    "cK -- Cockatrice touches the Kop",
+    "Croesus for President 2008 - Campaign Finance Reform Now (for the other guy)",
+    "- - - - - - CUT HERE - - - - - -",
+    "Don't ask me, I only adventure here",
+    "Down With Pants!",
+    "d, your dog or a killer?",
+    "FREE PUG AND NEWT!",
+    "Gehennoms Angels",
+    "Glutton For Punishment",
+    "Go Team Ant!",
+    "Got Newt?",
+    "Heading for Godhead",
+    "Hello, my darlings!", /* Charlie Drake */
+    "Hey! Nymphs! Steal This T-Shirt!",
+    "I <3 Dungeon of Doom",
+    "I <3 Maud",
+    "I am a Valkyrie. If you see me running, try to keep up.",
+    "I Am Not a Pack Rat - I Am a Collector",
+    "I bounced off a rubber tree",
+    "If you can read this, I can hit you with my polearm",
+    "I'm Confused!",
+    "I met Carl, the swordmaster of Jambalaya island and all I got was this lousy t-shirt",
+    "I'm in ur base, killin ur doods",
+    "I scored with the princess",
+    "I Support Single Succubi",
+    "I want to live forever or die in the attempt.",
+    "I'll stick it in you!",
+    "Kop Killaz",
+    "Lichen Park",
+    "LOST IN THOUGHT - please send search party",
+    "Meat Is Mordor",
+    "Minetown Better Business Bureau",
+    "Minetown Watch",
+    "Ms. Palm's House of Negotiable Affection -- A Very Reputable House Of Disrepute",
+    "^^  My eyes are up there!  ^^",
+    "Neferet/Pelias '08",
+    "Next time you wave at me, use more than one finger, please.",
+    "No Outfit Is Complete Without a Little Cat Fur",
+    "Objects In This Shirt Are Closer Than They Appear",
+    "Protection Racketeer",
+    "P Happens",
+    "Real men love Crom",
+    "Rodney in '08. OR ELSE!",
+    "Sokoban Gym -- Get Strong or Die Trying",
+    "Somebody stole my Mojo!",
+    "The Hellhound Gang",
+    "The Werewolves",
+    "They Might Be Storm Giants",
+    "Up with miniskirts!",
+    "Weapons don't kill people, I kill people",
+    "Where's the beef?",
+    "White Zombie",
+    "Worship me",
+    "You laugh because I'm different, I laugh because you're about to die",
+    "You're killing me!",
+    "You should hear what the voices in my head are saying about you.",
+    "Anhur State University - Home of the Fighting Fire Ants!",
+    "FREE HUGS",
+    "Serial Ascender",
+    "Plunder Island Brimstone Beach Club",
+    "Real Men Are Valkyries",
+    "Young Men's Cavedigging Association",
+    "Occupy Fort Ludios",
+    "I couldn't afford this T-shirt so I stole it!",
+    "End Mercantile Opacity Discrimination Now: Let Invisible Customers Shop!",
+    "Elvira's House O'Succubi, granting the gift of immorality!",
+    "Mind Flayers Suck",
+    "I'm not wearing any pants",
+    "Newt Fodder",
+    "My Dog ate Og",
+    "End Lich Prejudice Now!",
+    "Down With The Living!",
+    "Pudding Farmer",
+    "Dudley",
+    "I pray to Our Lady of Perpetual Mood Swings",
+    "Soooo, When's the Wizard Getting Back to You About That Brain?",
+    "Vegetarian",
+    "I plan to go to Astral",
+    "If They Don't Have Fruit Juice in Heaven, I Ain't Going",
+    "Living Dead",
 	    };
 	    char buf[BUFSZ];
 	    int erosion;
@@ -111,6 +195,7 @@ doread()
 
 	/* Actions required to win the game aren't counted towards conduct */
 	if (scroll->otyp != SPE_BOOK_OF_THE_DEAD &&
+	    scroll->otyp != SCR_MAIL &&
 		scroll->otyp != SPE_BLANK_PAPER &&
 		scroll->otyp != SCR_BLANK_PAPER)
 	    u.uconduct.literate++;
@@ -804,7 +889,19 @@ register struct obj	*sobj;
 			known = TRUE;
 		} else {	/* armor and scroll both cursed */
 		    Your("%s %s.", xname(otmp), otense(otmp, "vibrate"));
-		    if (otmp->spe >= -6) otmp->spe--;
+		    if (otmp->spe >= -6) {
+			otmp->spe--;
+			if (otmp->otyp == HELM_OF_BRILLIANCE) {
+			    ABON(A_INT)--;
+			    ABON(A_WIS)--;
+			    makeknown(otmp->otyp);
+			    flags.botl = 1;
+			} else if (otmp->otyp == GAUNTLETS_OF_DEXTERITY) {
+			    ABON(A_DEX)--;
+			    makeknown(otmp->otyp);
+			    flags.botl = 1;
+			}
+		    }
 		    make_stunned(HStun + rn1(10, 10), TRUE);
 		}
 	    }

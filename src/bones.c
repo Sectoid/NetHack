@@ -31,6 +31,8 @@ d_level *lev;
 		|| Is_botlevel(lev) || (Is_branchlev(lev) && lev->dlevel > 1)
 		   /* no bones in the invocation level               */
 		|| (In_hell(lev) && lev->dlevel == dunlevs_in_dungeon(lev) - 1)
+		   /* AIS: there was a hangup on the level           */
+		|| (level_info[ledger_no(lev)].flags & HANGUP_HERE)
 		);
 }
 
@@ -82,6 +84,7 @@ boolean restore;
 			otmp->rknown = 0;
 			otmp->invlet = 0;
 			otmp->no_charge = 0;
+                       otmp->was_thrown = 0;
 
 			if (otmp->otyp == SLIME_MOLD) goodfruit(otmp->spe);
 #ifdef MAIL
@@ -387,6 +390,8 @@ getbones()
 		&& !wizard
 #endif
 		) return(0);
+
+	if (!iflags.bones) return(0);
 	if(no_bones_level(&u.uz)) return(0);
 	fd = open_bonesfile(&u.uz, &bonesid);
 	if (fd < 0) return(0);
@@ -446,6 +451,7 @@ getbones()
 			}
 			resetobjs(fobj,TRUE);
 			resetobjs(level.buriedobjlist,TRUE);
+			has_loaded_bones = 1;
 		}
 	}
 	(void) close(fd);

@@ -16,6 +16,10 @@
 #include "patchlevel.h"
 #endif
 
+#ifdef USE_TILES
+extern short glyph2tile[];
+#endif
+
 #ifdef TTY_GRAPHICS
 
 #ifdef MAC
@@ -50,7 +54,11 @@ struct window_procs tty_procs = {
     WC_MOUSE_SUPPORT|
 #endif
     WC_COLOR|WC_HILITE_PET|WC_INVERSE|WC_EIGHT_BIT_IN,
+#ifdef TERMINFO
+    WC2_DARKGRAY,
+#else
     0L,
+#endif
     tty_init_nhwindows,
     tty_player_selection,
     tty_askname,
@@ -125,6 +133,14 @@ static char obuf[BUFSIZ];	/* BUFSIZ is defined in stdio.h */
 static char winpanicstr[] = "Bad window id %d";
 char defmorestr[] = "--More--";
 
+/** Track if the player is still selecting his character. */
+boolean in_character_selection = FALSE;
+
+
+#ifdef MENU_COLOR
+extern struct menucoloring *menu_colorings;
+#endif
+
 #ifdef CLIPPING
 # if defined(USE_TILES) && defined(MSDOS)
 boolean clipping = FALSE;	/* clipping on? */
@@ -162,7 +178,7 @@ STATIC_DCL void FDECL(invert_all, (winid,tty_menu_item *,tty_menu_item *, CHAR_P
 STATIC_DCL void FDECL(process_menu_window, (winid,struct WinDesc *));
 STATIC_DCL void FDECL(process_text_window, (winid,struct WinDesc *));
 STATIC_DCL tty_menu_item *FDECL(reverse, (tty_menu_item *));
-STATIC_DCL const char * FDECL(compress_str, (const char *));
+const char * FDECL(compress_str, (const char *));
 STATIC_DCL void FDECL(tty_putsym, (winid, int, int, CHAR_P));
 static char *FDECL(copy_of, (const char *));
 STATIC_DCL void FDECL(bail, (const char *));	/* __attribute__((noreturn)) */
@@ -182,8 +198,43 @@ static const char default_menu_cmds[] = {
 	MENU_SELECT_PAGE,
 	MENU_UNSELECT_PAGE,
 	MENU_INVERT_PAGE,
+	MENU_SEARCH,
 	0	/* null terminator */
 };
+
+
+#define TILE_ANSI_COMMAND 'z'
+
+#define AVTC_GLYPH_START 0
+#define AVTC_GLYPH_END 1
+#define AVTC_SELECT_WINDOW 2
+#define AVTC_INLINE_SYNC 3
+
+#ifdef USE_TILES
+
+int vt_tile_current_window = -2;
+
+void
+print_vt_code(i, c)
+int i, c;
+{
+    if (iflags.vt_nethack) {
+	if (c >= 0) {
+	    if (i == AVTC_SELECT_WINDOW) {
+		if (c == vt_tile_current_window) return;
+		vt_tile_current_window = c;
+	    }
+	    printf("\033[%d;%d%c", i, c, TILE_ANSI_COMMAND);
+	} else {
+	    printf("\033[%d%c", i, TILE_ANSI_COMMAND);
+	}
+    }
+}
+#else
+# define print_vt_code(i, c) ;
+# error no USE_TILES defined!
+#endif /* USE_TILES */
+
 
 
 /* clean up and quit */
@@ -323,6 +374,8 @@ tty_player_selection()
 	winid win;
 	anything any;
 	menu_item *selected = 0;
+
+	in_character_selection = TRUE;
 
 	/* prevent an unnecessary prompt */
 	rigid_role_checks();
@@ -648,6 +701,7 @@ give_up:	/* Quit */
 	    }
 	}
 	/* Success! */
+	in_character_selection = FALSE;
 	tty_display_nhwindow(BASE_WINDOW, FALSE);
 }
 
@@ -678,7 +732,7 @@ tty_askname()
 	ct = 0;
 	while((c = tty_nhgetch()) != '\n') {
 		if(c == EOF) error("End of input\n");
-		if (c == '\033') { ct = 0; break; }  /* continue outer loop */
+		if (c == DOESCAPE) { ct = 0; break; }  /* continue outer loop */
 #if defined(WIN32CON)
 		if (c == '\003') bail("^C abort.\n");
 #endif
@@ -828,7 +882,7 @@ tty_create_nhwindow(type)
 	newwin->offx = newwin->offy = 0;
 	/* sanity check */
 	if(iflags.msg_history < 20) iflags.msg_history = 20;
-	else if(iflags.msg_history > 60) iflags.msg_history = 60;
+	else if(iflags.msg_history > 400) iflags.msg_history = 400;
 	newwin->maxrow = newwin->rows = iflags.msg_history;
 	newwin->maxcol = newwin->cols = 0;
 	break;
@@ -842,7 +896,7 @@ tty_create_nhwindow(type)
 #endif
 	newwin->offy = min((int)ttyDisplay->rows-2, ROWNO+1);
 	newwin->rows = newwin->maxrow = 2;
-	newwin->cols = newwin->maxcol = min(ttyDisplay->cols, COLNO);
+	newwin->cols = newwin->maxcol = min(ttyDisplay->cols, MAXCO);
 	break;
     case NHW_MAP:
 	/* map window, ROWNO lines long, full width, below message window */
@@ -975,6 +1029,8 @@ tty_clear_nhwindow(window)
     if(window == WIN_ERR || (cw = wins[window]) == (struct WinDesc *) 0)
 	panic(winpanicstr,  window);
     ttyDisplay->lastwin = window;
+
+    print_vt_code(AVTC_SELECT_WINDOW, window);
 
     switch(cw->type) {
     case NHW_MESSAGE:
@@ -1128,6 +1184,68 @@ invert_all(window, page_start, page_end, acc)
     }
 }
 
+#ifdef MENU_COLOR
+STATIC_OVL boolean
+get_menu_coloring(str, color, attr)
+char *str;
+int *color, *attr;
+{
+    struct menucoloring *tmpmc;
+    if (iflags.use_menu_color)
+	for (tmpmc = menu_colorings; tmpmc; tmpmc = tmpmc->next)
+# ifdef MENU_COLOR_REGEX
+#  ifdef MENU_COLOR_REGEX_POSIX
+	    if (regexec(&tmpmc->match, str, 0, NULL, 0) == 0) {
+#  else
+	    if (re_search(&tmpmc->match, str, strlen(str), 0, 9999, 0) >= 0) {
+#  endif
+# else
+	    if (pmatch(tmpmc->match, str)) {
+# endif
+		*color = tmpmc->color;
+		*attr = tmpmc->attr;
+		return TRUE;
+	    }
+    return FALSE;
+}
+#endif /* MENU_COLOR */
+
+
+boolean
+toggle_menu_curr(window, curr, lineno, in_view, counting, count)
+winid window;
+tty_menu_item *curr;
+int lineno;
+boolean in_view, counting;
+long count;
+{
+    if (curr->selected) {
+	if (counting && count > 0) {
+	    curr->count = count;
+	    if (in_view) set_item_state(window, lineno, curr);
+	    return TRUE;
+	} else { /* change state */
+	    curr->selected = FALSE;
+	    curr->count = -1L;
+	    if (in_view) set_item_state(window, lineno, curr);
+	    return TRUE;
+	}
+    } else {	/* !selected */
+	if (counting && count > 0) {
+	    curr->count = count;
+	    curr->selected = TRUE;
+	    if (in_view) set_item_state(window, lineno, curr);
+	    return TRUE;
+	} else if (!counting) {
+	    curr->selected = TRUE;
+	    if (in_view) set_item_state(window, lineno, curr);
+	    return TRUE;
+	}
+	/* do nothing counting&&count==0 */
+    }
+    return FALSE;
+}
+
 STATIC_OVL void
 process_menu_window(window, cw)
 winid window;
@@ -1204,6 +1322,10 @@ struct WinDesc *cw;
 		for (page_lines = 0, curr = page_start;
 			curr != page_end;
 			page_lines++, curr = curr->next) {
+#ifdef MENU_COLOR
+		    int color = NO_COLOR, attr = ATR_NONE;
+		    boolean menucolr = FALSE;
+#endif
 		    if (curr->selector)
 			*rp++ = curr->selector;
 
@@ -1219,6 +1341,50 @@ struct WinDesc *cw;
 		     * actually output the character.  We're faster doing
 		     * this.
 		     */
+		    /* add selector for display */
+		    if (curr->selector) {
+			/* because WIN32CON this must be done in
+			 * a brain-dead way */
+			putchar(curr->selector); ttyDisplay->curx++;
+			putchar(' '); ttyDisplay->curx++;
+			/* set item state */
+			if (curr->identifier.a_void != 0 && curr->selected) {
+			    if (curr->count == -1L)
+				(void) putchar('+'); /* all selected */
+			    else
+				(void) putchar('#'); /* count selected */
+			} else {
+			    putchar('-');
+			}
+			ttyDisplay->curx++;
+			putchar(' '); ttyDisplay->curx++;
+		    }
+#ifndef WIN32CON
+		    if (curr->glyph != NO_GLYPH && iflags.use_menu_glyphs) {
+			int glyph_color = NO_COLOR;
+			glyph_t character;
+			unsigned special; /* unused */
+			/* map glyph to character and color */
+			mapglyph(curr->glyph, &character, &glyph_color, &special, 0, 0);
+
+			print_vt_code(AVTC_GLYPH_START, glyph2tile[curr->glyph]);
+			if (glyph_color != NO_COLOR) term_start_color(glyph_color);
+			pututf8char(character);
+			if (glyph_color != NO_COLOR) term_end_color();
+			print_vt_code(AVTC_GLYPH_END, -1);
+			putchar(' ');
+			ttyDisplay->curx +=2;
+		    }
+#endif
+
+
+#ifdef MENU_COLOR
+		   if (iflags.use_menu_color &&
+		       (menucolr = get_menu_coloring(curr->str, &color,&attr))) {
+		       term_start_attr(attr);
+		       if (color != NO_COLOR) term_start_color(color);
+		   } else
+#endif
 		    term_start_attr(curr->attr);
 		    for (n = 0, cp = curr->str;
 #ifndef WIN32CON
@@ -1228,14 +1394,13 @@ struct WinDesc *cw;
 			  *cp && (int) ttyDisplay->curx < (int) ttyDisplay->cols;
 			  cp++, n++, ttyDisplay->curx++)
 #endif
-			if (n == 2 && curr->identifier.a_void != 0 &&
-							curr->selected) {
-			    if (curr->count == -1L)
-				(void) putchar('+'); /* all selected */
-			    else
-				(void) putchar('#'); /* count selected */
-			} else
-			    (void) putchar(*cp);
+		    (void) pututf8char((unsigned char) *cp);
+#ifdef MENU_COLOR
+		   if (iflags.use_menu_color && menucolr) {
+		       if (color != NO_COLOR) term_end_color();
+		       term_end_attr(attr);
+		   } else
+#endif
 		    term_end_attr(curr->attr);
 		}
 	    } else {
@@ -1380,6 +1545,33 @@ struct WinDesc *cw;
 		if (cw->how == PICK_ANY)
 		    invert_all(window, page_start, page_end, 0);
 		break;
+	    case MENU_SEARCH:
+		if (cw->how == PICK_NONE) {
+		    tty_nhbell();
+		    break;
+		} else {
+		    char searchbuf[BUFSZ], tmpbuf[BUFSZ];
+		    boolean on_curr_page = FALSE;
+		    int lineno = 0;
+		    tty_getlin("Search for:", tmpbuf);
+		    if (!tmpbuf || tmpbuf[0] == '\033') break;
+		    Sprintf(searchbuf, "*%s*", tmpbuf);
+		    for (curr = cw->mlist; curr; curr = curr->next) {
+			if (on_curr_page) lineno++;
+			if (curr == page_start)
+			    on_curr_page = TRUE;
+			else if (curr == page_end)
+			    on_curr_page = FALSE;
+			if (curr->identifier.a_void && pmatch(searchbuf, curr->str)) {
+			    toggle_menu_curr(window, curr, lineno, on_curr_page, counting, count);
+			    if (cw->how == PICK_ONE) {
+				finished = TRUE;
+				break;
+			    }
+			}
+		    }
+		}
+		break;
 	    default:
 		if (cw->how == PICK_NONE || !index(resp, morc)) {
 		    /* unacceptable input received */
@@ -1398,27 +1590,7 @@ struct WinDesc *cw;
 			curr != page_end;
 			n++, curr = curr->next)
 		    if (morc == curr->selector) {
-			if (curr->selected) {
-			    if (counting && count > 0) {
-				curr->count = count;
-				set_item_state(window, n, curr);
-			    } else { /* change state */
-				curr->selected = FALSE;
-				curr->count = -1L;
-				set_item_state(window, n, curr);
-			    }
-			} else {	/* !selected */
-			    if (counting && count > 0) {
-				curr->count = count;
-				curr->selected = TRUE;
-				set_item_state(window, n, curr);
-			    } else if (!counting) {
-				curr->selected = TRUE;
-				set_item_state(window, n, curr);
-			    }
-			    /* do nothing counting&&count==0 */
-			}
-
+			toggle_menu_curr(window, curr, n, TRUE, counting, count);
 			if (cw->how == PICK_ONE) finished = TRUE;
 			break;	/* from `for' loop */
 		    }
@@ -1443,7 +1615,7 @@ struct WinDesc *cw;
 	    tty_curs(window, 1, n);
 	    cl_end();
 	    dmore(cw, quitchars);
-	    if (morc == '\033') {
+	    if (morc == DOESCAPE) {
 		cw->flags |= WIN_CANCELLED;
 		break;
 	    }
@@ -1470,7 +1642,7 @@ struct WinDesc *cw;
 		    *cp && (int) ttyDisplay->curx < (int) ttyDisplay->cols;
 		    cp++, ttyDisplay->curx++)
 #endif
-		(void) putchar(*cp);
+	    (void) pututf8char(*cp);
 	    term_end_attr(attr);
 	}
     }
@@ -1479,7 +1651,7 @@ struct WinDesc *cw;
 		 (cw->type == NHW_TEXT) ? (int) ttyDisplay->rows - 1 : n);
 	cl_end();
 	dmore(cw, quitchars);
-	if (morc == '\033')
+	if (morc == DOESCAPE)
 	    cw->flags |= WIN_CANCELLED;
     }
 }
@@ -1498,6 +1670,8 @@ tty_display_nhwindow(window, blocking)
 	return;
     ttyDisplay->lastwin = window;
     ttyDisplay->rawprint = 0;
+
+    print_vt_code(AVTC_SELECT_WINDOW, window);
 
     switch(cw->type) {
     case NHW_MESSAGE:
@@ -1529,11 +1703,19 @@ tty_display_nhwindow(window, blocking)
 	/* avoid converting to uchar before calculations are finished */
 	cw->offx = (uchar) (int)
 	    max((int) 10, (int) (ttyDisplay->cols - cw->maxcol - 1));
-	if(cw->type == NHW_MENU)
+	if(cw->type == NHW_MENU
+#ifdef WIN_EDGE
+	    || iflags.win_edge
+#endif
+	)
 	    cw->offy = 0;
 	if(ttyDisplay->toplin == 1)
 	    tty_display_nhwindow(WIN_MESSAGE, TRUE);
-	if(cw->offx == 10 || cw->maxrow >= (int) ttyDisplay->rows) {
+	if(cw->offx == 10 || cw->maxrow >= (int) ttyDisplay->rows
+#ifdef WIN_EDGE
+	    || iflags.win_edge
+#endif
+	) {
 	    cw->offx = 0;
 	    if(cw->offy) {
 		tty_curs(window, 1, 0);
@@ -1561,6 +1743,8 @@ tty_dismiss_nhwindow(window)
 
     if(window == WIN_ERR || (cw = wins[window]) == (struct WinDesc *) 0)
 	panic(winpanicstr,  window);
+
+    print_vt_code(AVTC_SELECT_WINDOW, window);
 
     switch(cw->type) {
     case NHW_MESSAGE:
@@ -1630,6 +1814,8 @@ register int x, y;	/* not xchar: perhaps xchar is unsigned and
     if(window == WIN_ERR || (cw = wins[window]) == (struct WinDesc *) 0)
 	panic(winpanicstr,  window);
     ttyDisplay->lastwin = window;
+
+    print_vt_code(AVTC_SELECT_WINDOW, window);
 
 #if defined(USE_TILES) && defined(MSDOS)
     adjust_cursor_flags(cw);
@@ -1704,12 +1890,22 @@ tty_putsym(window, x, y, ch)
     if(window == WIN_ERR || (cw = wins[window]) == (struct WinDesc *) 0)
 	panic(winpanicstr,  window);
 
+    print_vt_code(AVTC_SELECT_WINDOW, window);
+
     switch(cw->type) {
     case NHW_STATUS:
     case NHW_MAP:
     case NHW_BASE:
 	tty_curs(window, x, y);
+#ifdef UTF8_GLYPHS
+	if (iflags.UTF8graphics) {
+		pututf8char((unsigned char)ch);
+	} else {
+		(void) putchar(ch);
+	}
+#else
 	(void) putchar(ch);
+#endif
 	ttyDisplay->curx++;
 	cw->curx++;
 	break;
@@ -1722,7 +1918,7 @@ tty_putsym(window, x, y, ch)
 }
 
 
-STATIC_OVL const char*
+const char*
 compress_str(str)
 const char *str;
 {
@@ -1754,7 +1950,7 @@ tty_putstr(window, attr, str)
     register struct WinDesc *cw = 0;
     register char *ob;
     register const char *nb;
-    register int i, j, n0;
+    register long i, j, n0;
 
     /* Assume there's a real problem if the window is missing --
      * probably a panic message
@@ -1771,6 +1967,8 @@ tty_putstr(window, attr, str)
 	str = compress_str(str);
 
     ttyDisplay->lastwin = window;
+
+    print_vt_code(AVTC_SELECT_WINDOW, window);
 
     switch(cw->type) {
     case NHW_MESSAGE:
@@ -1831,7 +2029,11 @@ tty_putstr(window, attr, str)
 		cw->cury++;
 		tty_curs(window, cw->curx+1, cw->cury);
 	    }
-	    (void) putchar(*str);
+	    if (iflags.UTF8graphics) {
+		    pututf8char(*str);
+	    } else {
+		    (void) putchar(*str);
+	    }
 	    str++;
 	    ttyDisplay->curx++;
 	}
@@ -1986,7 +2188,7 @@ tty_start_menu(window)
 void
 tty_add_menu(window, glyph, identifier, ch, gch, attr, str, preselected)
     winid window;	/* window to use, must be of type NHW_MENU */
-    int glyph;		/* glyph to display with item (unused) */
+    int glyph;		/* glyph to display with item */
     const anything *identifier;	/* what to return if selected */
     char ch;		/* keyboard accelerator (0 = pick our own) */
     char gch;		/* group accelerator (0 = no group) */
@@ -1996,8 +2198,6 @@ tty_add_menu(window, glyph, identifier, ch, gch, attr, str, preselected)
 {
     register struct WinDesc *cw = 0;
     tty_menu_item *item;
-    const char *newstr;
-    char buf[4+BUFSZ];
 
     if (str == (const char*) 0)
 	return;
@@ -2007,19 +2207,6 @@ tty_add_menu(window, glyph, identifier, ch, gch, attr, str, preselected)
 	panic(winpanicstr,  window);
 
     cw->nitems++;
-    if (identifier->a_void) {
-	int len = strlen(str);
-	if (len >= BUFSZ) {
-	    /* We *think* everything's coming in off at most BUFSZ bufs... */
-	    impossible("Menu item too long (%d).", len);
-	    len = BUFSZ - 1;
-	}
-	Sprintf(buf, "%c - ", ch ? ch : '?');
-	(void) strncpy(buf+4, str, len);
-	buf[4+len] = '\0';
-	newstr = buf;
-    } else
-	newstr = str;
 
     item = (tty_menu_item *) alloc(sizeof(tty_menu_item));
     item->identifier = *identifier;
@@ -2028,7 +2215,8 @@ tty_add_menu(window, glyph, identifier, ch, gch, attr, str, preselected)
     item->selector = ch;
     item->gselector = gch;
     item->attr = attr;
-    item->str = copy_of(newstr);
+    item->str = copy_of(str);
+    item->glyph = glyph;
 
     item->next = cw->mlist;
     cw->mlist = item;
@@ -2103,12 +2291,22 @@ tty_end_menu(window, prompt)
 	    cw->plist[n/lmax] = curr;
 	}
 	if (curr->identifier.a_void && !curr->selector) {
-	    curr->str[0] = curr->selector = menu_ch;
+	    curr->selector = menu_ch;
 	    if (menu_ch++ == 'z') menu_ch = 'A';
 	}
 
 	/* cut off any lines that are too long */
-	len = strlen(curr->str) + 2;	/* extra space at beg & end */
+	len = strlen((curr->str ? curr->str : "")) + 2;	/* extra space at beg & end */
+
+	if (curr->selector) {
+	    /* extra space for keyboard accelerator */
+	    len += 4;
+	    if (curr->glyph != NO_GLYPH && iflags.use_menu_glyphs) {
+		/* extra space for glyph */
+		len += 2;
+	    }
+	}
+
 	if (len > (int)ttyDisplay->cols) {
 	    curr->str[ttyDisplay->cols-2] = 0;
 	    len = ttyDisplay->cols;
@@ -2123,7 +2321,7 @@ tty_end_menu(window, prompt)
     if (cw->npages > 1) {
 	char buf[QBUFSZ];
 	/* produce the largest demo string */
-	Sprintf(buf, "(%d of %d) ", cw->npages, cw->npages);
+	Sprintf(buf, "(%ld of %ld) ", cw->npages, cw->npages);
 	len = strlen(buf);
 	cw->morestr = copy_of("");
     } else {
@@ -2223,7 +2421,7 @@ const char *mesg;
     wins[WIN_MESSAGE]->flags &= ~WIN_CANCELLED;
     ttyDisplay->dismiss_more = 0;
 
-    return ((how == PICK_ONE && morc == let) || morc == '\033') ? morc : '\0';
+    return ((how == PICK_ONE && morc == let) || morc == DOESCAPE) ? morc : '\0';
 }
 
 void
@@ -2296,7 +2494,8 @@ docorner(xmin, ymax)
     }
 
     end_glyphout();
-    if (ymax >= (int) wins[WIN_STATUS]->offy) {
+    if (!in_character_selection && /* check for status lines to update */
+	(ymax >= (int) wins[WIN_STATUS]->offy)) {
 					/* we have wrecked the bottom line */
 	flags.botlx = 1;
 	bot();
@@ -2411,7 +2610,7 @@ tty_print_glyph(window, x, y, glyph)
     xchar x, y;
     int glyph;
 {
-    int ch;
+    glyph_t ch;
     boolean reverse_on = FALSE;
     int	    color;
     unsigned special;
@@ -2425,8 +2624,12 @@ tty_print_glyph(window, x, y, glyph)
     /* map glyph to character and color */
     mapglyph(glyph, &ch, &color, &special, x, y);
 
+    print_vt_code(AVTC_SELECT_WINDOW, window);
+
     /* Move the cursor. */
     tty_curs(window, x,y);
+
+    print_vt_code(AVTC_GLYPH_START, glyph2tile[glyph]);
 
 #ifndef NO_TERMS
     if (ul_hack && ch == '_') {		/* non-destructive underscore */
@@ -2452,12 +2655,29 @@ tty_print_glyph(window, x, y, glyph)
 	reverse_on = TRUE;
     }
 
+#ifdef TEXTCOLOR
+    if ((window == NHW_MAP) && !reverse_on && (special & (MG_STAIRS|MG_OBJPILE))) {
+	if ((special & MG_STAIRS) && iflags.hilite_hidden_stairs)
+	    term_start_bgcolor(CLR_RED);
+	else if ((special & MG_OBJPILE) && iflags.hilite_obj_piles)
+	    term_start_bgcolor(CLR_BLUE);
+    }
+#endif
+
 #if defined(USE_TILES) && defined(MSDOS)
     if (iflags.grmode && iflags.tile_view)
       xputg(glyph,ch,special);
     else
 #endif
+#ifdef UTF8_GLYPHS
+	if (iflags.UTF8graphics) {
+		pututf8char(get_unicode_codepoint(ch));
+	} else {
+		g_putch(ch);	/* print the character */
+	}
+#else
 	g_putch(ch);		/* print the character */
+#endif
 
     if (reverse_on) {
     	term_end_attr(ATR_INVERSE);
@@ -2469,6 +2689,15 @@ tty_print_glyph(window, x, y, glyph)
 	}
 #endif
     }
+
+    print_vt_code(AVTC_GLYPH_END, -1);
+
+#ifdef TEXTCOLOR
+    if (!reverse_on && (special & (MG_STAIRS|MG_OBJPILE))) {
+	term_end_color();
+	ttyDisplay->color = NO_COLOR;
+    }
+#endif
 
     wins[window]->curx++;	/* one character over */
     ttyDisplay->curx++;		/* the real cursor moved too */
@@ -2510,6 +2739,7 @@ int
 tty_nhgetch()
 {
     int i;
+    int tmp;
 #ifdef UNIX
     /* kludge alert: Some Unix variants return funny values if getc()
      * is called, interrupted, and then called again.  There
@@ -2520,6 +2750,7 @@ tty_nhgetch()
     char nestbuf;
 #endif
 
+    print_vt_code(AVTC_INLINE_SYNC, -1);
     (void) fflush(stdout);
     /* Note: if raw_print() and wait_synch() get called to report terminal
      * initialization problems, then wins[] and ttyDisplay might not be
@@ -2536,9 +2767,14 @@ tty_nhgetch()
 #else
     i = tgetch();
 #endif
-    if (!i) i = '\033'; /* map NUL to ESC since nethack doesn't expect NUL */
+    if (!i) i = DOESCAPE; /* map NUL to ESC since nethack doesn't expect NUL */
     if (ttyDisplay && ttyDisplay->toplin == 1)
 	ttyDisplay->toplin = 2;
+#ifdef USE_TILES
+    tmp = vt_tile_current_window;
+    vt_tile_current_window++;
+    print_vt_code(AVTC_SELECT_WINDOW, tmp);
+#endif
     return i;
 }
 
@@ -2564,7 +2800,7 @@ tty_nh_poskey(x, y, mod)
 	    wins[WIN_MESSAGE]->flags &= ~WIN_STOP;
     i = ntposkey(x, y, mod);
     if (!i && mod && *mod == 0)
-    	i = '\033'; /* map NUL to ESC since nethack doesn't expect NUL */
+    	i = DOESCAPE; /* map NUL to ESC since nethack doesn't expect NUL */
     if (ttyDisplay && ttyDisplay->toplin == 1)
 		ttyDisplay->toplin = 2;
     return i;

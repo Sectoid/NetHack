@@ -594,6 +594,8 @@ static void write_char(WINDOW *win, int x, int y, nethack_char nch)
     curses_toggle_color_attr(win, nch.color, nch.attr, OFF);
 }
 
+/* Unconditionally write a single wide character to a window at the given
+coordinates without a refresh.  Currently only used for the map. */
 static void write_wchar(WINDOW *win, int x, int y, nethack_char nch)
 {
     static cchar_t wide = {0};

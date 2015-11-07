@@ -1010,27 +1010,47 @@ struct mkroom	*croom;
 	    struct monst *was;
 	    struct obj *obj;
 	    int wastyp;
+	    int i = 0; /* prevent endless loop in case makemon always fails */
 
 	    /* Named random statues are of player types, and aren't stone-
 	     * resistant (if they were, we'd have to reset the name as well as
 	     * setting corpsenm).
 	     */
-	    for (wastyp = otmp->corpsenm; ; wastyp = rndmonnum()) {
+	    for (wastyp = otmp->corpsenm; i < 1000; i++) {
 		/* makemon without rndmonst() might create a group */
 		was = makemon(&mons[wastyp], 0, 0, NO_MM_FLAGS);
-		if (!resists_ston(was)) break;
+		if (was) {
+		    if (!resists_ston(was)) break;
+		    mongone(was);
+		}
+		wastyp = rndmonnum();
+	    }
+	    if (was) {
+		otmp->corpsenm = wastyp;
+		while(was->minvent) {
+		    obj = was->minvent;
+		    obj->owornmask = 0;
+		    obj_extract_self(obj);
+		    (void) add_to_container(otmp, obj);
+		}
+		otmp->owt = weight(otmp);
 		mongone(was);
 	    }
-	    otmp->corpsenm = wastyp;
-	    while(was->minvent) {
-		obj = was->minvent;
-		obj->owornmask = 0;
-		obj_extract_self(obj);
-		(void) add_to_container(otmp, obj);
-	    }
-	    otmp->owt = weight(otmp);
-	    mongone(was);
 	}
+
+#ifdef RECORD_ACHIEVE
+        /* Nasty hack here: try to determine if this is the Mines or Sokoban
+         * "prize" and then set record_achieve_special (maps to corpsenm)
+         * for the object.  That field will later be checked to find out if
+         * the player obtained the prize. */
+        if(otmp->otyp == LUCKSTONE && Is_mineend_level(&u.uz)) {
+                otmp->record_achieve_special = 1;
+        } else if((otmp->otyp == AMULET_OF_REFLECTION ||
+                   otmp->otyp == BAG_OF_HOLDING) && 
+                  Is_sokoend_level(&u.uz)) {
+                otmp->record_achieve_special = 1;
+        }
+#endif
 
 	stackobj(otmp);
 

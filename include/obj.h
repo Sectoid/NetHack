@@ -91,12 +91,18 @@ struct obj {
 
 	Bitfield(in_use,1);	/* for magic items before useup items */
 	Bitfield(bypass,1);	/* mark this as an object to be skipped by bhito() */
-	/* 6 free bits */
+       Bitfield(was_thrown,1); /* for pickup_thrown */
+       /* 5 free bits */
 
 	int	corpsenm;	/* type of corpse is mons[corpsenm] */
 #define leashmon  corpsenm	/* gets m_id of attached pet */
 #define spestudied corpsenm	/* # of times a spellbook has been studied */
 #define fromsink  corpsenm	/* a potion from a sink */
+
+#ifdef RECORD_ACHIEVE
+#define record_achieve_special corpsenm
+#endif
+
 	unsigned oeaten;	/* nutrition left in food, if partly eaten */
 	long age;		/* creation date */
 

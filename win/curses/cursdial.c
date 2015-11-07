@@ -453,13 +453,14 @@ int curses_ext_cmd()
         
         for (count = 0; extcmdlist[count].ef_txt; count++)
         {
+	  if (!extcmdlist[count].autocomplete) continue;
             if (strlen(extcmdlist[count].ef_txt) > prompt_width)
             {
                 if (strncasecmp(cur_choice, extcmdlist[count].ef_txt,
                  prompt_width) == 0)
                 {
                     if ((extcmdlist[count].ef_txt[prompt_width] ==
-                     letter) || letter == '*')
+			 lowc(letter)) || letter == '*')
                     {
                         if ((matches == 0) && (letter != '*'))
                         {
@@ -1208,37 +1209,82 @@ static int menu_get_selections(WINDOW *win, nhmenu *menu, int how)
             curletter = curses_convert_keys(curletter);
         }
         
-        if (isdigit(curletter) && (how != PICK_NONE))
+        
+        
+        switch (how)
         {
-            count = curses_get_count(curletter - '0');
-            touchwin(win);
-            refresh();
-            curletter = getch();
-            
-            if (count > 0)
+            case PICK_NONE:
             {
-                count_letter = curletter;
+                if (menu->num_pages == 1)
+                {    
+                    if (curletter == KEY_ESC)
+                    {
+                        num_selected = -1;
+                    }
+                    else
+                    {
+                        num_selected = 0;
+    
+                    }
+                    dismiss = TRUE;
+                    break;
+                }
+                break;
+            }
+            case PICK_ANY:
+            {
+                switch (curletter)
+                {
+                   case MENU_SELECT_PAGE:
+                   {
+                       (void) menu_operation(win, menu, SELECT, curpage);
+                       break;
+                   }
+                   case MENU_SELECT_ALL:
+                   {
+                       curpage = menu_operation(win, menu, SELECT, 0);
+                       break;
+                   }
+                   case MENU_UNSELECT_PAGE:
+                   {
+                       (void) menu_operation(win, menu, DESELECT, curpage);
+                       break;
+                   }
+                   case MENU_UNSELECT_ALL:
+                   {
+                       curpage = menu_operation(win, menu, DESELECT, 0);
+                       break;
+                   }
+                   case MENU_INVERT_PAGE:
+                   {
+                       (void) menu_operation(win, menu, INVERT, curpage);
+                       break;
+                   }
+                   case MENU_INVERT_ALL:
+                   {
+                       curpage = menu_operation(win, menu, INVERT, 0);
+                       break;
+                   }
+               }
+            }
+            default:
+            {
+                if (isdigit(curletter))
+                {
+                    count = curses_get_count(curletter - '0');
+                    touchwin(win);
+                    refresh();
+                    curletter = getch();
+                    if (count > 0)
+                    {
+                        count_letter = curletter;
+                    }
+                }
             }
         }
         
-
-        if ((how == PICK_NONE) && (menu->num_pages == 1))
-        {
-            if (how==PICK_NONE)
-            {    
-                if (curletter == KEY_ESC)
-                {
-                    num_selected = -1;
-                }
-                else
-                {
-                    num_selected = 0;
-
-                }
-                dismiss = TRUE;
-                break;
-            }                
-        }
+        
+        
         
         switch (curletter)
         {
@@ -1355,45 +1401,9 @@ static int menu_get_selections(WINDOW *win, nhmenu *menu, int how)
                 }                
             }
         }
-        if (how == PICK_ANY)
-        {
-            switch (curletter)
-                {
-                case MENU_SELECT_PAGE:
-                {
-                    (void) menu_operation(win, menu, SELECT, curpage);
-                    break;
-                }
-                case MENU_SELECT_ALL:
-                {
-                    curpage = menu_operation(win, menu, SELECT, 0);
-                    break;
-                }
-                case MENU_UNSELECT_PAGE:
-                {
-                    (void) menu_operation(win, menu, DESELECT, curpage);
-                    break;
-                }
-                case MENU_UNSELECT_ALL:
-                {
-                    curpage = menu_operation(win, menu, DESELECT, 0);
-                    break;
-                }
-                case MENU_INVERT_PAGE:
-                {
-                    (void) menu_operation(win, menu, INVERT, curpage);
-                    break;
-                }
-                case MENU_INVERT_ALL:
-                {
-                    curpage = menu_operation(win, menu, INVERT, 0);
-                    break;
-                }
-            }
-        }
+
         
         menu_item_ptr = menu->entries;
-        
         while (menu_item_ptr != NULL)
         {
             if (menu_item_ptr->identifier.a_void != NULL)
@@ -1417,6 +1427,13 @@ static int menu_get_selections(WINDOW *win, nhmenu *menu, int how)
                         dismiss = TRUE;
                         break;
                     }
+                    else if ((how == PICK_ANY) && (curletter == count_letter))
+                    {
+                        menu_select_deselect(win, menu_item_ptr, SELECT);
+                        menu_item_ptr->count = count;
+                        count = 0;
+                        count_letter = '\0';
+                    }
                     else
                     {
                         menu_select_deselect(win, menu_item_ptr, INVERT);
@@ -1439,13 +1456,6 @@ static int menu_get_selections(WINDOW *win, nhmenu *menu, int how)
                 if (menu_item_ptr->selected)
                 {
                     num_selected++;
-                    
-                    if (menu_item_ptr->accelerator == count_letter)
-                    {
-                        menu_item_ptr->count = count;
-                        count = 0;
-                        count_letter = '\0';
-                    }
                 }
             }
             menu_item_ptr = menu_item_ptr->next_item;

@@ -16,6 +16,78 @@ STATIC_DCL void NDECL(do_positionbar);
 
 #ifdef OVL0
 
+static int prev_hp_notify;
+
+char *
+hpnotify_format_str(char *str)
+{
+    static char buf[128];
+    char *f, *p, *end;
+    int ispercent = 0;
+
+    buf[0] = '\0';
+
+    if (!str) return NULL;
+
+    f = str;
+    p = buf;
+    end = buf + sizeof(buf) - 10;
+
+    while (*f) {
+      if (ispercent) {
+	switch (*f) {
+	case 'a':
+	    snprintf (p, end + 1 - p, "%ld", abs(uhp()-prev_hp_notify));
+	  while (*p != '\0')
+	    p++;
+	  break;
+        case 'c':
+	    snprintf (p, end + 1 - p, "%c", (prev_hp_notify > uhp() ? '-' : '+'));
+	  p++;
+	  break;
+	case 'm':
+	    snprintf (p, end + 1 - p, "%ld", uhpmax());
+	  while (*p != '\0')
+	    p++;
+	  break;
+	case 'H':
+	    if (uhp() == uhpmax()) {
+	    snprintf (p, end + 1 - p, "%s", "max");
+	  } else {
+		snprintf (p, end + 1 - p, "%ld", uhp());
+	  }
+	  while (*p != '\0')
+	    p++;
+	  break;
+	case 'h':
+	    snprintf (p, end + 1 - p, "%ld", uhp());
+	  while (*p != '\0')
+	    p++;
+	  break;
+	default:
+	  *p = *f;
+	  if (p < end)
+	    p++;
+	}
+	ispercent = 0;
+      } else {
+	if (*f == '%')
+	  ispercent = 1;
+	else {
+	  *p = *f;
+	  if (p < end)
+	    p++;
+	}
+      }
+      f++;
+    }
+    *p = '\0';
+
+    return buf;
+}
+
+static long prev_dgl_extrainfo = 0;
+
 void
 moveloop()
 {
@@ -50,14 +122,13 @@ moveloop()
     monstr_init();	/* monster strengths */
     objects_init();
 
-#ifdef WIZARD
-    if (wizard) add_debug_extended_commands();
-#endif
+    commands_init();
 
     (void) encumber_msg(); /* in case they auto-picked up something */
 
     u.uz0.dlevel = u.uz.dlevel;
     youmonst.movement = NORMAL_SPEED;	/* give the hero some movement points */
+    prev_hp_notify = uhp();
 
     for(;;) {
 	get_nh_event();
@@ -143,6 +214,12 @@ moveloop()
 		    if (u.ublesscnt)  u.ublesscnt--;
 		    if(flags.time && !flags.run)
 			flags.botl = 1;
+
+		    if ((prev_dgl_extrainfo == 0) || (prev_dgl_extrainfo < (moves + 250))) {
+			prev_dgl_extrainfo = moves;
+			mk_dgl_extrainfo();
+		    }
+
 
 		    /* One possible result of prayer is healing.  Whether or
 		     * not you get healed depends on your current hit points.
@@ -245,7 +322,7 @@ moveloop()
 				if (occupation)
 				    stop_occupation();
 				else
-				    nomul(0);
+				    nomul(0, NULL);
 				if (change == 1) polyself(FALSE);
 				else you_were();
 				change = 0;
@@ -294,6 +371,22 @@ moveloop()
 	    /* once-per-hero-took-time things go here */
 	    /******************************************/
 
+	if(u.utrap && u.utraptype == TT_LAVA) {
+	    if(!is_lava(u.ux,u.uy))
+		u.utrap = 0;
+	    else if (!u.uinvulnerable) {
+		u.utrap -= 1<<8;
+		if(u.utrap < 1<<8) {
+		    killer_format = KILLED_BY;
+		    killer = "molten lava";
+		    You("sink below the surface and die.");
+		    done(DISSOLVED);
+		} else if(didmove && !u.umoved) {
+		    Norep("You sink deeper into the lava.");
+		    u.utrap += rnd(4);
+		}
+	    }
+	}
 
 	} /* actual time passed */
 
@@ -316,7 +409,22 @@ moveloop()
 
 	    if (vision_full_recalc) vision_recalc(0);	/* vision! */
 	}
+
+#ifdef REALTIME_ON_BOTL
+        if(iflags.showrealtime) {
+            /* Update the bottom line if the number of minutes has
+             * changed */
+            if(get_realtime() / 60 != realtime_data.last_displayed_time / 60)
+                flags.botl = 1;
+        }
+#endif
+
 	if(flags.botl || flags.botlx) bot();
+
+	if (iflags.hp_notify && (prev_hp_notify != uhp())) {
+	  pline("%s", hpnotify_format_str(iflags.hp_notify_fmt ? iflags.hp_notify_fmt : "[HP%c%a=%h]"));
+	  prev_hp_notify = uhp();
+	}
 
 	flags.move = 1;
 
@@ -356,23 +464,6 @@ moveloop()
 	    !(moves % 15) && !rn2(2))
 		do_vicinity_map();
 
-	if(u.utrap && u.utraptype == TT_LAVA) {
-	    if(!is_lava(u.ux,u.uy))
-		u.utrap = 0;
-	    else if (!u.uinvulnerable) {
-		u.utrap -= 1<<8;
-		if(u.utrap < 1<<8) {
-		    killer_format = KILLED_BY;
-		    killer = "molten lava";
-		    You("sink below the surface and die.");
-		    done(DISSOLVED);
-		} else if(didmove && !u.umoved) {
-		    Norep("You sink deeper into the lava.");
-		    u.utrap += rnd(4);
-		}
-	    }
-	}
-
 #ifdef WIZARD
 	if (iflags.sanity_check)
 	    sanity_check();
@@ -402,6 +493,7 @@ moveloop()
 		rhack(save_cm);
 	    }
 	} else if (multi == 0) {
+	  ck_server_admin_msg();
 #ifdef MAIL
 	    ckmailstatus();
 #endif
@@ -420,6 +512,9 @@ moveloop()
 	    if (flags.time && flags.run) flags.botl = 1;
 	    display_nhwindow(WIN_MAP, FALSE);
 	}
+
+	if (moves > last_clear_screen + 2000) doredraw();
+
     }
 }
 
@@ -438,7 +533,7 @@ stop_occupation()
 		sync_hunger();
 */
 #ifdef REDO
-		nomul(0);
+		nomul(0, NULL);
 		pushch(0);
 #endif
 	}
@@ -538,6 +633,19 @@ newgame()
 #endif
 	program_state.something_worth_saving++;	/* useful data now exists */
 
+#if defined(RECORD_REALTIME) || defined(REALTIME_ON_BOTL)
+
+        /* Start the timer here */
+        realtime_data.realtime = (time_t)0L;
+
+#if defined(BSD) && !defined(POSIX_TYPES)
+        (void) time((long *)&realtime_data.restoretime);
+#else
+        (void) time(&realtime_data.restoretime);
+#endif
+
+#endif /* RECORD_REALTIME || REALTIME_ON_BOTL */
+
 	/* Success! */
 	welcome(TRUE);
 	return;
@@ -628,6 +736,33 @@ do_positionbar()
 	update_positionbar(pbar);
 }
 #endif
+
+#if defined(REALTIME_ON_BOTL) || defined (RECORD_REALTIME)
+time_t
+get_realtime(void)
+{
+    time_t curtime;
+
+    /* Get current time */
+#if defined(BSD) && !defined(POSIX_TYPES)
+    (void) time((long *)&curtime);
+#else
+    (void) time(&curtime);
+#endif
+
+    /* Since the timer isn't set until the game starts, this prevents us
+     * from displaying nonsense on the bottom line before it does. */
+    if(realtime_data.restoretime == 0) {
+        curtime = realtime_data.realtime;
+    } else {
+        curtime -= realtime_data.restoretime;
+        curtime += realtime_data.realtime;
+    }
+ 
+    return curtime;
+}
+#endif /* REALTIME_ON_BOTL || RECORD_REALTIME */
+
 
 #endif /* OVLB */
 
