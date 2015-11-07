@@ -489,7 +489,6 @@ glyph_t curses_convert_glyph(int ch, glyph_t glyph)
         return ch;
     }
 
-    
 #define _wide(val) W##val->chars[0]
     switch (symbol)
     {
