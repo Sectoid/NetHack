@@ -7,6 +7,8 @@
 
 #define E extern
 
+#define DOESCAPE '\033'
+
 E int NDECL((*occupation));
 E int NDECL((*afternmv));
 
@@ -384,6 +386,14 @@ struct autopickup_exception {
 	struct autopickup_exception *next;
 };
 #endif /* AUTOPICKUP_EXCEPTIONS */
+
+/* FIXME: These should be integrated into objclass and permonst structs,
+   but that invalidates saves */
+E glyph_t objclass_unicode_codepoint[NUM_OBJECTS];
+E glyph_t permonst_unicode_codepoint[NUMMONS];
+
+
+E boolean curses_stupid_hack;
 
 #undef E
 
