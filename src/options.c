@@ -3016,6 +3016,9 @@ goodfruit:
 			}
 			else if ((boolopt[i].addr) == &iflags.use_inverse ||
 					(boolopt[i].addr) == &iflags.showrace ||
+#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
+					(boolopt[i].addr) == &iflags.hitpointbar ||
+#endif
 					(boolopt[i].addr) == &iflags.hilite_pet ||
 					(boolopt[i].addr) == &iflags.wc2_guicolor) {
 			    need_redraw = TRUE;
