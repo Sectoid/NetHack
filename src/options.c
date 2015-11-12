@@ -1593,6 +1593,7 @@ const char *str;
 	char feature[BUFSZ];
 	char codepoint[BUFSZ];
 	int i, num;
+	boolean found = FALSE;
 
 	if (!parse_extended_option(str, feature, codepoint)) {
 		return FALSE;
@@ -1607,11 +1608,11 @@ const char *str;
 	for (i=0; i < MAXPCHARS; i++) {
 		if (!strcmpi(feature, defsyms[i].explanation)) {
 			assign_utf8graphics_symbol(i, num);
-			return TRUE;
+			found = TRUE;
 		}
 	}
 
-	return FALSE;
+	return found;
 }
 
 /* Turns out, you can have multiple graphics turned on. Lets give those a stack ranking */
